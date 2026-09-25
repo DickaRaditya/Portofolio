@@ -23,7 +23,7 @@ Vite + vanilla JavaScript portfolio using Firebase Authentication, Cloud Firesto
 
 6. Copy `.env.example` to `.env.local` and fill in the four Firebase web configuration fields and `VITE_FIREBASE_ADMIN_UID`. The UID must match the rules. These are browser configuration values; never put service-account credentials or the admin password in a `VITE_*` variable.
 7. Check **Authentication → Settings → Authorized domains** and add the production/custom domain and `localhost` for local development as needed.
-8. Stay on the Spark plan for link-only records: paste a project URL or certificate verification/document URL in the dashboard and leave the optional file picker empty. Cloud Storage attachments require Blaze; setup is documented in [STORAGE_SETUP.md](STORAGE_SETUP.md) if you enable it later.
+8. Stay on the Spark plan for link-only records: paste a project URL or certificate verification/document URL in the dashboard. Keep `VITE_FIREBASE_ENABLE_STORAGE=false` (or omit it); the file picker is hidden. Cloud Storage attachments require Blaze; setup is documented in [STORAGE_SETUP.md](STORAGE_SETUP.md) if you enable it later.
 
 ## Local development
 
@@ -34,7 +34,7 @@ npm install
 npm run dev
 ```
 
-Open `/#login` to sign in. The dashboard supports editing the profile, adding/editing/deleting projects, and adding/editing/deleting certificates. On Spark, use the **Project URL** and **Verification URL** fields for public links; both are optional only when you add an attachment on Blaze. Projects and certificates can accept up to five optional attachments (10 MB each). Certificates require at least one file or link. Each has a **Published** checkbox. Clearing it hides that record from public readers. **Cancel / New** clears an edit form to create a new record.
+Open `/#login` to sign in. The dashboard supports editing the profile, adding/editing/deleting projects, and adding/editing/deleting certificates. On Spark, use the **Project URL** and **Verification URL** fields for public links; the file picker is hidden. Certificates require a link. If you later enable Storage on Blaze and set `VITE_FIREBASE_ENABLE_STORAGE=true`, projects and certificates can accept up to five optional attachments (10 MB each).
 
 With no Firebase configuration, the public design remains visible with placeholder content and a setup notice; sign-in is disabled. Configuration is embedded at build time, so restart Vite or redeploy after changing environment variables.
 

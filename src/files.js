@@ -1,5 +1,5 @@
 import { deleteObject, getBlob, ref, uploadBytesResumable } from 'firebase/storage'
-import { auth, isAdmin, storage } from './firebase.js'
+import { auth, isAdmin, storage, storageEnabled } from './firebase.js'
 
 export const MAX_FILE_BYTES = 10 * 1024 * 1024
 export const MAX_FILES = 5
@@ -27,6 +27,7 @@ export function validateAttachments(files, existingCount = 0) {
 }
 
 export async function uploadAttachment(kind, id, file, onProgress = () => {}) {
+  if (!storageEnabled) throw new Error('This Spark deployment is link-only. Paste a public URL instead of uploading a file.')
   if (!storage || !isAdmin(auth?.currentUser)) throw new Error('Admin access required to upload files.')
   if (!['projects', 'certificates'].includes(kind) || !id || id.includes('/')) throw new Error('Invalid upload destination.')
   validateAttachments([file])

@@ -1,6 +1,6 @@
 # Enable project and certificate uploads
 
-The frontend is ready for multiple attachments, but the Firebase bucket must be enabled separately. If you stay on Spark, skip this guide: use the dashboard's Project URL and Verification URL fields instead. Existing links and the rest of the portfolio continue to work without Storage.
+The frontend supports multiple attachments behind `VITE_FIREBASE_ENABLE_STORAGE=true`, but the Firebase bucket must be enabled separately. If you stay on Spark, leave that variable false or unset: the file picker is hidden, and you should use the dashboard's Project URL and Verification URL fields instead. Existing links and the rest of the portfolio continue to work without Storage.
 
 ## 1. Enable Firebase Storage
 

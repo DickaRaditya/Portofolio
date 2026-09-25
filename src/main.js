@@ -1,5 +1,5 @@
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth'
-import { auth, isAdmin, isConfigured } from './firebase.js'
+import { auth, isAdmin, isConfigured, storageEnabled } from './firebase.js'
 import { deleteContent, loadPortfolio, saveContent, saveProfile } from './data.js'
 import { downloadAttachment, FILE_ACCEPT, fileSize, validateAttachments } from './files.js'
 import './style.css'
@@ -80,6 +80,7 @@ function attachmentLinks(item, collection) {
     <div class="attachment"><button type="button" class="downloadFile" data-collection="${collection}" data-id="${esc(item.id)}" data-index="${index}"><span aria-hidden="true">↓</span> ${esc(file.name)} <small>${fileSize(file.size)}</small></button><span class="attachmentStatus" role="status"></span></div>`).join('')}</div>` : ''
 }
 function uploadFields() {
+  if (!storageEnabled) return `<p class="wide sparkLinkOnly meta">Spark plan is link-only. Paste a public URL in the Project URL or Verification URL field above.</p>`
   return `<fieldset class="wide uploadPanel"><legend>Optional file attachments</legend><label>Choose files<input name="files" type="file" multiple accept="${FILE_ACCEPT}"></label><p class="meta uploadHint">Spark plan: leave this empty and paste a public URL in the link field above. File attachments require Firebase Storage on Blaze.</p><p class="fileSelection meta" role="status"></p><div class="existingFiles"></div><p class="formStatus meta" role="status" aria-live="polite"></p></fieldset>`
 }
 function editAttachments(form, item) {
@@ -225,7 +226,7 @@ function bindDashboard() {
       event.currentTarget.querySelector('.fileSelection').textContent = ''
       event.currentTarget.querySelector('.formStatus').textContent = ''
     })
-    document.getElementById(formId)?.elements.files.addEventListener('change', event => {
+    document.getElementById(formId)?.elements.files?.addEventListener('change', event => {
       const input = event.currentTarget
       const message = input.form.querySelector('.fileSelection')
       try {
@@ -239,7 +240,7 @@ function bindDashboard() {
       const form = event.currentTarget
       const formData = new FormData(form)
       const { id, files: ignoredFiles, remove_file: ignoredRemoval, ...data } = Object.fromEntries(formData)
-      const files = [...form.elements.files.files]
+      const files = storageEnabled ? [...form.elements.files.files] : []
       const removePaths = formData.getAll('remove_file')
       data.published = form.elements.published.checked
       void mutate(form.querySelector('button'), async onProgress => {
