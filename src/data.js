@@ -3,6 +3,7 @@ import {
   query, serverTimestamp, setDoc, updateDoc, where,
 } from 'firebase/firestore'
 import { auth, db, isAdmin } from './firebase.js'
+import { removeAttachments, uploadAttachment, validateAttachments } from './files.js'
 
 const records = snapshot => snapshot.docs.map(item => ({ ...item.data(), id: item.id }))
 const editableCollections = new Set(['projects', 'certificates'])
@@ -42,15 +43,46 @@ export async function saveProfile(data) {
   await setDoc(doc(db, 'profile', 'main'), { ...data, updated_at: serverTimestamp() })
 }
 
-export async function saveContent(name, id, data) {
+export async function saveContent(name, id, data, { files = [], removePaths = [], onProgress } = {}) {
   requireAdmin()
   const target = contentCollection(name)
   const content = { ...data, updated_at: serverTimestamp() }
-  if (id) await updateDoc(doc(target, id), content)
-  else await addDoc(target, { ...content, created_at: serverTimestamp() })
+  if (!files.length && !removePaths.length) {
+    if (id) await updateDoc(doc(target, id), content)
+    else await addDoc(target, { ...content, created_at: serverTimestamp() })
+    return { cleanupFailed: [] }
+  }
+  const recordRef = id ? doc(target, id) : doc(target)
+  const existing = id ? await getDoc(recordRef) : null
+  if (id && !existing.exists()) throw new Error('This item was deleted. Refresh and create a new item.')
+  const oldFiles = existing?.data()?.attachments || []
+  const kept = oldFiles.filter(file => !removePaths.includes(file.path))
+  validateAttachments(files, kept.length)
+  const uploaded = []
+  try {
+    for (const [index, file] of files.entries()) {
+      uploaded.push(await uploadAttachment(name, recordRef.id, file,
+        percent => onProgress?.(`Uploading ${index + 1}/${files.length}: ${file.name} (${percent}%)`)))
+    }
+    const attachments = [...kept, ...uploaded]
+    const next = { ...content, attachments, attachment_paths: attachments.map(file => file.path) }
+    if (id) await updateDoc(recordRef, next)
+    else await setDoc(recordRef, { ...next, created_at: serverTimestamp() })
+  } catch (error) {
+    // A rejected save should not leave uploaded files behind. All unreferenced
+    // objects remain private even if cleanup is interrupted.
+    const failed = await removeAttachments(uploaded)
+    if (failed.length) error.message += ' Some unattached uploads need cleanup in Firebase Storage.'
+    throw error
+  }
+  // Commit the metadata first, so removed files become private immediately.
+  return { cleanupFailed: await removeAttachments(oldFiles.filter(file => removePaths.includes(file.path))) }
 }
 
 export async function deleteContent(name, id) {
   requireAdmin()
-  await deleteDoc(doc(contentCollection(name), id))
+  const target = doc(contentCollection(name), id)
+  const existing = await getDoc(target)
+  await deleteDoc(target)
+  return { cleanupFailed: await removeAttachments(existing.data()?.attachments || []) }
 }

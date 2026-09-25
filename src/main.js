@@ -1,6 +1,7 @@
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth'
 import { auth, isAdmin, isConfigured } from './firebase.js'
 import { deleteContent, loadPortfolio, saveContent, saveProfile } from './data.js'
+import { downloadAttachment, FILE_ACCEPT, fileSize, validateAttachments } from './files.js'
 import './style.css'
 
 const app = document.querySelector('#app')
@@ -22,6 +23,12 @@ function validateUrl(value, label) {
   if (value && !safeUrl(value)) throw new Error(`${label} must use an http:// or https:// URL.`)
 }
 function errorMessage(error) {
+  if (error.code?.startsWith('storage/')) {
+    if (error.code === 'storage/unauthorized') return 'File access denied. Check Storage rules and whether the item is published.'
+    if (error.code === 'storage/object-not-found') return 'This file could not be found. Please refresh and try again.'
+    if (['storage/no-default-bucket', 'storage/bucket-not-found', 'storage/project-not-found'].includes(error.code)) return 'Enable Cloud Storage in Firebase and check the storage bucket setting.'
+    return 'File transfer failed. Check your connection and Firebase Storage setup (billing, rules, and CORS), then retry.'
+  }
   if (error.code === 'permission-denied') return 'Access denied. Check the deployed Firestore rules and admin UID.'
   if (error.code?.startsWith('auth/')) {
     if (error.code === 'auth/too-many-requests') return 'Too many sign-in attempts. Please try again later.'
@@ -60,13 +67,23 @@ $ status
 [✓] documenting
 [✓] learning</pre></div></div></header>
  <main><section id="about"><div class="wrap"><div class="sectionHead"><span>01 — ABOUT</span><h2>Perkenalan</h2></div><div class="card"><p>${esc(p.about||p.bio||'Tambahkan perkenalan melalui dashboard admin.')}</p><div class="meta">${esc(p.location||'Indonesia')} · ${esc(p.email||'email@example.com')}</div></div></div></section>
- <section id="projects"><div class="wrap"><div class="sectionHead"><span>02 — PROJECTS</span><h2>Security Projects</h2></div><div class="cards">${state.projects.map(x=>`<article class="card"><div class="tag">${esc(x.category||'Cybersecurity')}</div><h3>${esc(x.title)}</h3><p>${esc(x.description)}</p>${x.url?`<a class="textLink" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.url))}">View project →</a>`:''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada project publik.</p></div>'}</div></div></section>
- <section id="certificates"><div class="wrap"><div class="sectionHead"><span>03 — CERTIFICATES & FILES</span><h2>Credentials</h2></div><div class="cards">${state.certificates.map(x=>`<article class="card fileCard"><div><div class="tag">${esc(x.kind||'Document')}</div><h3>${esc(x.title)}</h3><p>${esc(x.description||'')}</p><small>${esc(x.issuer || "")}</small></div><a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.public_url))}">Open</a></article>`).join('') || '<div class="card"><p class="meta">Belum ada sertifikat/file publik.</p></div>'}</div></div></section>
+ <section id="projects"><div class="wrap"><div class="sectionHead"><span>02 — PROJECTS</span><h2>Security Projects</h2></div><div class="cards">${state.projects.map(x=>`<article class="card"><div class="tag">${esc(x.category||'Cybersecurity')}</div><h3>${esc(x.title)}</h3><p>${esc(x.description)}</p>${attachmentLinks(x, 'projects')}${x.url?`<a class="textLink" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.url))}">View project →</a>`:''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada project publik.</p></div>'}</div></div></section>
+ <section id="certificates"><div class="wrap"><div class="sectionHead"><span>03 — CERTIFICATES & FILES</span><h2>Credentials</h2></div><div class="cards">${state.certificates.map(x=>`<article class="card fileCard"><div><div class="tag">${esc(x.kind||'Document')}</div><h3>${esc(x.title)}</h3><p>${esc(x.description||'')}</p><small>${esc(x.issuer || "")}</small>${attachmentLinks(x, 'certificates')}</div>${x.public_url ? `<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.public_url))}">Open link</a>` : ''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada sertifikat/file publik.</p></div>'}</div></div></section>
  <section id="contact"><div class="wrap"><div class="sectionHead"><span>04 — CONTACT</span><h2>Let's connect</h2></div><div class="card"><p class="meta">Untuk kolaborasi, diskusi security, atau peluang profesional.</p><div class="actions"><a class="btn primary" href="mailto:${esc(p.email||'email@example.com')}">Email</a>${p.github?`<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(p.github))}">GitHub</a>`:''}${p.linkedin?`<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(p.linkedin))}">LinkedIn</a>`:''}</div></div></div></section></main>`)
 }
 
 function loginPage() {
   return shell(`<main class="auth"><div class="authBox"><div class="eyebrow">ADMIN ACCESS</div><h1>Sign in</h1><p class="meta">Kelola profile, project, dan sertifikat.</p>${notice()}<form id="loginForm"><input name="email" type="email" placeholder="Email admin" aria-label="Email admin" autocomplete="username" required><input name="password" type="password" placeholder="Password" aria-label="Password" autocomplete="current-password" required><button class="btn primary" type="submit" ${!isConfigured ? 'disabled' : ''}>Sign in</button></form><p id="loginMsg" class="error" role="alert">${esc(loginMessage)}</p></div></main>`)
+}
+function attachmentLinks(item, collection) {
+  return (item.attachments || []).length ? `<div class="attachments">${item.attachments.map((file, index) => `
+    <div class="attachment"><button type="button" class="downloadFile" data-collection="${collection}" data-id="${esc(item.id)}" data-index="${index}"><span aria-hidden="true">↓</span> ${esc(file.name)} <small>${fileSize(file.size)}</small></button><span class="attachmentStatus" role="status"></span></div>`).join('')}</div>` : ''
+}
+function uploadFields() {
+  return `<fieldset class="wide uploadPanel"><legend>Attachments</legend><label>Choose files<input name="files" type="file" multiple accept="${FILE_ACCEPT}"></label><p class="meta uploadHint">Up to 5 files, 10 MB each. PDF, images, ZIP, text, or Office documents.</p><p class="fileSelection meta" role="status"></p><div class="existingFiles"></div><p class="formStatus meta" role="status" aria-live="polite"></p></fieldset>`
+}
+function editAttachments(form, item) {
+  form.querySelector('.existingFiles').innerHTML = (item.attachments || []).map(file => `<div class="existingFile"><span>${esc(file.name)} <small>${fileSize(file.size)}</small></span><label class="check"><input type="checkbox" name="remove_file" value="${esc(file.path)}"> Remove on save</label></div>`).join('')
 }
 function dashboard() {
   return shell(`<main class="dashboard"><div class="wrap"><div class="dashTop"><div><div class="eyebrow">ADMIN DASHBOARD</div><h1>Portfolio Control Center</h1></div><button id="logout" class="btn">Sign out</button></div>
@@ -75,14 +92,14 @@ function dashboard() {
   ${[['full_name', 'Nama lengkap'], ['headline', 'Headline'], ['location', 'Lokasi'], ['email', 'Email'], ['github', 'GitHub URL'], ['linkedin', 'LinkedIn URL']].map(([key, label]) => `<label>${label}<input name="${key}" type="${key === 'email' ? 'email' : ['github', 'linkedin'].includes(key) ? 'url' : 'text'}" value="${esc(state.profile?.[key] || '')}"></label>`).join('')}
   <label class="wide">Bio<textarea name="bio">${esc(state.profile?.bio || '')}</textarea></label><label class="wide">About<textarea name="about">${esc(state.profile?.about || '')}</textarea></label>
   <label class="check"><input name="published" type="checkbox" ${state.profile?.published !== false ? 'checked' : ''}> Published</label><button class="btn primary">Save profile</button></form></section>
-  <section><div class="sectionHead"><span>PROJECTS</span><h2>Manage projects</h2></div><form id="projectForm" class="card formGrid"><input type="hidden" name="id"><label>Title<input name="title" required></label><label>Category<input name="category"></label><label class="wide">Description<textarea name="description"></textarea></label><label>Project URL<input name="url" type="url"></label><label>Sort order<input name="sort_order" type="number" step="1" value="0" required></label><label class="check"><input name="published" type="checkbox" checked> Published</label><div class="actions"><button class="btn primary">Save project</button><button class="btn" type="reset">Cancel / New</button></div></form>
+  <section><div class="sectionHead"><span>PROJECTS</span><h2>Manage projects</h2></div><form id="projectForm" class="card formGrid"><input type="hidden" name="id"><label>Title<input name="title" required></label><label>Category<input name="category"></label><label class="wide">Description<textarea name="description"></textarea></label><label>Project URL (optional)<input name="url" type="url"></label><label>Sort order<input name="sort_order" type="number" step="1" value="0" required></label>${uploadFields()}<label class="check"><input name="published" type="checkbox" checked> Published</label><div class="actions"><button class="btn primary">Save project</button><button class="btn" type="reset">Cancel / New</button></div></form>
   <div class="cards">${state.projects.map(item => adminItem(item, 'projects')).join('')}</div></section>
-  <section><div class="sectionHead"><span>CERTIFICATES</span><h2>Manage certificates</h2></div><form id="certificateForm" class="card formGrid"><input type="hidden" name="id"><label>Title<input name="title" required></label><label>Issuer<input name="issuer"></label><label class="wide">Description<textarea name="description"></textarea></label><label>Type<select name="kind"><option>Certificate</option><option>Report</option><option>Project File</option><option>Other</option></select></label><label>Certificate / document URL<input name="public_url" type="url" placeholder="https://..." required></label><label class="check"><input name="published" type="checkbox" checked> Published</label><div class="actions"><button class="btn primary">Save certificate</button><button class="btn" type="reset">Cancel / New</button></div></form>
+  <section><div class="sectionHead"><span>CERTIFICATES</span><h2>Manage certificates</h2></div><form id="certificateForm" class="card formGrid"><input type="hidden" name="id"><label>Title<input name="title" required></label><label>Issuer<input name="issuer"></label><label class="wide">Description<textarea name="description"></textarea></label><label>Type<select name="kind"><option>Certificate</option><option>Report</option><option>Project File</option><option>Other</option></select></label><label>Verification URL (optional)<input name="public_url" type="url" placeholder="https://..."></label>${uploadFields()}<label class="check"><input name="published" type="checkbox" checked> Published</label><div class="actions"><button class="btn primary">Save certificate</button><button class="btn" type="reset">Cancel / New</button></div></form>
   <div class="cards">${state.certificates.map(item => adminItem(item, 'certificates')).join('')}</div></section>
   </div></main>`)
 }
 function adminItem(item, collection) {
-  return `<article class="card adminItem"><div><b>${esc(item.title)}</b><p class="meta">${esc(item.category || item.kind || '')} · ${item.published ? 'Published' : 'Draft'}</p></div><button class="btn small editItem" data-collection="${collection}" data-id="${esc(item.id)}">Edit</button><button class="btn small danger deleteItem" data-collection="${collection}" data-id="${esc(item.id)}">Delete</button></article>`
+  return `<article class="card adminItem"><div><b>${esc(item.title)}</b><p class="meta">${esc(item.category || item.kind || '')} · ${item.published ? 'Published' : 'Draft'}</p>${attachmentLinks(item, collection)}</div><button class="btn small editItem" data-collection="${collection}" data-id="${esc(item.id)}">Edit</button><button class="btn small danger deleteItem" data-collection="${collection}" data-id="${esc(item.id)}">Delete</button></article>`
 }
 
 async function route() {
@@ -157,20 +174,25 @@ function bindLogin() {
 async function mutate(button, action, success) {
   if (button.disabled) return
   const version = routeVersion
-  button.disabled = true
-  const message = document.querySelector('#dashboardMsg')
+  const controls = [...document.querySelectorAll('.dashboard input, .dashboard textarea, .dashboard select, .dashboard button')]
+  const disabled = controls.map(control => control.disabled)
+  controls.forEach(control => { control.disabled = true })
+  const message = button.closest('form')?.querySelector('.formStatus') || document.querySelector('#dashboardMsg')
   if (message) message.textContent = 'Saving…'
   try {
-    await action()
+    const result = await action(text => { if (message) message.textContent = text })
     if (version !== routeVersion) return
     await route()
     const nextMessage = document.querySelector('#dashboardMsg')
-    if (nextMessage) nextMessage.textContent = success
+    if (nextMessage) {
+      nextMessage.textContent = result?.cleanupFailed?.length
+        ? `${success} Some old files could not be deleted from Storage. They are no longer public; remove them in Firebase Storage.` : success
+    }
   } catch (error) {
     if (version !== routeVersion) return
     if (message) { message.textContent = errorMessage(error); message.className = 'error' }
     else window.alert(errorMessage(error))
-  } finally { button.disabled = false }
+  } finally { controls.forEach((control, index) => { control.disabled = disabled[index] }) }
 }
 
 function bindDashboard() {
@@ -199,13 +221,28 @@ function bindDashboard() {
     // so Cancel / New cannot accidentally overwrite the previously edited record.
     document.getElementById(formId)?.addEventListener('reset', event => {
       event.currentTarget.elements.id.value = ''
+      event.currentTarget.querySelector('.existingFiles').innerHTML = ''
+      event.currentTarget.querySelector('.fileSelection').textContent = ''
+      event.currentTarget.querySelector('.formStatus').textContent = ''
+    })
+    document.getElementById(formId)?.elements.files.addEventListener('change', event => {
+      const input = event.currentTarget
+      const message = input.form.querySelector('.fileSelection')
+      try {
+        validateAttachments([...input.files])
+        message.className = 'fileSelection meta'
+        message.textContent = [...input.files].map(file => `${file.name} (${fileSize(file.size)})`).join(' · ')
+      } catch (error) { message.className = 'fileSelection error'; message.textContent = error.message }
     })
     document.getElementById(formId)?.addEventListener('submit', event => {
       event.preventDefault()
       const form = event.currentTarget
-      const { id, ...data } = Object.fromEntries(new FormData(form))
+      const formData = new FormData(form)
+      const { id, files: ignoredFiles, remove_file: ignoredRemoval, ...data } = Object.fromEntries(formData)
+      const files = [...form.elements.files.files]
+      const removePaths = formData.getAll('remove_file')
       data.published = form.elements.published.checked
-      void mutate(form.querySelector('button'), async () => {
+      void mutate(form.querySelector('button'), async onProgress => {
         data.title = data.title.trim()
         if (!data.title) throw new Error('Title is required.')
         if (collection === 'projects') {
@@ -213,10 +250,11 @@ function bindDashboard() {
           data.sort_order = Number(data.sort_order)
           if (!Number.isSafeInteger(data.sort_order)) throw new Error('Sort order must be a whole number.')
         } else {
-          if (!data.public_url.trim()) throw new Error('Certificate URL is required.')
+          const keptFiles = (state.certificates.find(item => item.id === id)?.attachments || []).filter(file => !removePaths.includes(file.path))
+          if (!data.public_url.trim() && !files.length && !keptFiles.length) throw new Error('Upload a certificate file or enter a verification URL.')
           validateUrl(data.public_url, 'Certificate URL')
         }
-        await saveContent(collection, id, data)
+        return saveContent(collection, id, data, { files, removePaths, onProgress })
       }, collection === 'projects' ? 'Project saved.' : 'Certificate saved.')
     })
   }
@@ -226,10 +264,11 @@ function bindDashboard() {
     const form = document.getElementById(collection === 'projects' ? 'projectForm' : 'certificateForm')
     form.reset()
     for (const input of form.elements) {
-      if (!input.name) continue
+      if (!input.name || input.type === 'file' || input.name === 'remove_file') continue
       if (input.type === 'checkbox') input.checked = item[input.name] === true
       else input.value = item[input.name] ?? (input.name === 'sort_order' ? 0 : '')
     }
+    editAttachments(form, item)
     form.scrollIntoView({ behavior: 'smooth', block: 'center' })
     form.elements.title.focus({ preventScroll: true })
   }))
@@ -239,6 +278,29 @@ function bindDashboard() {
   }))
 }
 
+app.addEventListener('click', async event => {
+  const button = event.target.closest('.downloadFile')
+  if (!button || button.disabled) return
+  const item = state[button.dataset.collection]?.find(item => item.id === button.dataset.id)
+  const file = item?.attachments?.[Number(button.dataset.index)]
+  if (!file) return
+  const message = button.parentElement.querySelector('.attachmentStatus')
+  button.disabled = true
+  message.textContent = 'Downloading…'
+  try {
+    const blob = await downloadAttachment(file)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = file.name
+    document.body.append(link)
+    link.click()
+    link.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 30000)
+    message.textContent = 'Downloaded.'
+  } catch (error) { message.textContent = errorMessage(error) }
+  finally { button.disabled = false }
+})
 window.addEventListener('hashchange', route)
 if (auth) {
   onAuthStateChanged(auth, user => {

@@ -1,0 +1,39 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.uid == 'iP36QONRlHe9aZROraw0iIl5HmD3';
+    }
+    function supportedKind(kind) {
+      return kind == 'projects' || kind == 'certificates';
+    }
+    function publishedAttachment(kind, id, uploadId, filename) {
+      let record = firestore.get(/databases/(default)/documents/$(kind)/$(id));
+      return record.data.published == true
+        && ('portfolio/' + kind + '/' + id + '/' + uploadId + '/' + filename)
+          in record.data.attachment_paths;
+    }
+    function validFile() {
+      return request.resource.size > 0
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType in [
+          'application/pdf', 'image/png', 'image/jpeg', 'image/webp',
+          'text/plain', 'text/csv', 'application/zip',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        ];
+    }
+    match /portfolio/{kind}/{id}/{uploadId}/{filename} {
+      allow get: if supportedKind(kind)
+        && (isAdmin() || publishedAttachment(kind, id, uploadId, filename));
+      allow create: if supportedKind(kind) && isAdmin() && validFile();
+      // Each upload has a new UUID; in-place overwrite is unnecessary.
+      allow delete: if supportedKind(kind) && isAdmin();
+    }
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # CyberSec Professional Portfolio
 
-Vite + vanilla JavaScript portfolio using Firebase Authentication and Cloud Firestore. The existing dark green portfolio layout is preserved.
+Vite + vanilla JavaScript portfolio using Firebase Authentication, Cloud Firestore, and Cloud Storage. The portfolio uses a warm-white palette with forest-green accents.
 
 ## Firebase setup
 
@@ -13,7 +13,7 @@ Vite + vanilla JavaScript portfolio using Firebase Authentication and Cloud Fire
    let adminUid = 'YOUR_ACTUAL_ADMIN_UID';
    ```
 
-   Leave the placeholder comparison on the following line unchanged. The unchanged rules intentionally deny all writes until configured. Rules do not read Vite environment variables.
+   This repository is already configured for the cybersecporto admin. If using another project, update the UID in both `firestore.rules` and `storage.rules`. Leave the placeholder comparison unchanged. Rules do not read Vite environment variables.
 5. Publish `firestore.rules` in **Firestore Database → Rules**, or use the Firebase CLI:
 
    ```sh
@@ -23,6 +23,7 @@ Vite + vanilla JavaScript portfolio using Firebase Authentication and Cloud Fire
 
 6. Copy `.env.example` to `.env.local` and fill in the four Firebase web configuration fields and `VITE_FIREBASE_ADMIN_UID`. The UID must match the rules. These are browser configuration values; never put service-account credentials or the admin password in a `VITE_*` variable.
 7. Check **Authentication → Settings → Authorized domains** and add the production/custom domain and `localhost` for local development as needed.
+8. To enable project and certificate attachments, complete [STORAGE_SETUP.md](STORAGE_SETUP.md). Cloud Storage requires the Blaze plan, a provisioned bucket, Storage rules, and CORS configuration. Link-only records still work without Storage.
 
 ## Local development
 
@@ -33,7 +34,7 @@ npm install
 npm run dev
 ```
 
-Open `/#login` to sign in. The dashboard supports editing the profile, adding/editing/deleting projects, and adding/editing/deleting certificates. Each has a **Published** checkbox. Clearing it hides that record from public readers. **Cancel / New** clears an edit form to create a new record.
+Open `/#login` to sign in. The dashboard supports editing the profile, adding/editing/deleting projects, and adding/editing/deleting certificates. Projects and certificates accept up to five attachments (10 MB each), with optional external links. Certificates require at least one file or a link. Each has a **Published** checkbox. Clearing it hides that record from public readers. **Cancel / New** clears an edit form to create a new record.
 
 With no Firebase configuration, the public design remains visible with placeholder content and a setup notice; sign-in is disabled. Configuration is embedded at build time, so restart Vite or redeploy after changing environment variables.
 
@@ -42,14 +43,16 @@ With no Firebase configuration, the public design remains visible with placehold
 | Path | Fields |
 | --- | --- |
 | `profile/main` | `full_name`, `headline`, `bio`, `about`, `location`, `email`, `github`, `linkedin`, `published`, `updated_at` |
-| `projects/{autoId}` | `title`, `category`, `description`, `url`, `sort_order` (integer), `published`, `created_at`, `updated_at` |
-| `certificates/{autoId}` | `title`, `description`, `kind`, `issuer`, `public_url`, `published`, `created_at`, `updated_at` |
+| `projects/{autoId}` | `title`, `category`, `description`, `url`, `sort_order` (integer), `published`, `attachments`, `attachment_paths`, `created_at`, `updated_at` |
+| `certificates/{autoId}` | `title`, `description`, `kind`, `issuer`, `public_url`, `published`, `attachments`, `attachment_paths`, `created_at`, `updated_at` |
 
 Dates are Firestore timestamps; publication flags are booleans. Saving the profile creates `profile/main` if needed. The app creates other documents automatically. No seed data or composite indexes are required. Public reads query only `published == true`; the admin dashboard reads drafts as well. Sorting is performed in the client.
 
 Only the configured UID can write these collections. Unknown collections and nested paths are denied. Changing the browser UID variable cannot grant database access: deployed rules are the authority. See Firebase's [query/rules documentation](https://firebase.google.com/docs/firestore/security/rules-query) and [authentication documentation](https://firebase.google.com/docs/auth/web/start).
 
-Certificate records contain links to issuer verification pages or documents hosted elsewhere. Binary upload/storage is not part of this Firestore implementation. Unpublishing hides the record, but does not revoke access to an externally hosted public URL. Existing database records and uploaded assets are not automatically transferred: re-enter/import records with the fields above and replace old document URLs with their new hosted URLs before retiring the previous backend.
+Each attachment contains `path`, `name`, `size` (bytes), and `type` (MIME type). `attachment_paths` mirrors those paths for Storage rule checks. Binary files live under `portfolio/{projects|certificates}/{documentId}/{uploadId}/{filename}` in Cloud Storage. Public downloads require a published Firestore document that still references the file. The app uses rule-checked blob downloads rather than storing token download URLs. Downloads already saved by a visitor and external public URLs cannot be revoked by unpublishing.
+
+File replacements use new paths. Metadata is saved before removed files are deleted; failed saves clean up new uploads, and failed cleanup is reported to the admin. Unreferenced objects are not publicly readable through the rules. Existing link-only records remain compatible; no data migration is needed.
 
 ## Vercel deployment
 
@@ -59,7 +62,7 @@ Certificate records contain links to issuer verification pages or documents host
 4. Deploy. `vercel.json` sets the Vite framework, `npm ci` installation, `npm run build`, `dist` output directory, and SPA fallback.
 5. Add the Vercel/custom domain to Firebase Authentication's authorized domains as needed. Environment changes require a fresh deployment.
 
-Vercel hosts the frontend only; deploying it does not deploy Firestore rules. Firebase credentials/account setup and data population must be completed in your own project.
+Vercel hosts the frontend only; deploying it does not deploy Firestore or Storage rules or configure bucket CORS. Firebase credentials/account setup and data population must be completed in your own project.
 
 ## Verification
 
@@ -69,7 +72,7 @@ npm run build
 npm run preview
 ```
 
-The automated data-layer tests cover public query filtering, rejection of non-admin mutations, and create/update/delete behavior. They mock the SDK and do not replace testing deployed Firestore rules.
+The automated tests cover public filtering, admin checks, CRUD, attachment validation, upload progress, failed-upload/save cleanup, and deletion ordering. They mock the SDK and do not replace testing deployed Firestore and Storage rules.
 
 Before going live, use the Firebase Rules Playground (or Firestore emulator with Java 21+) to verify:
 
@@ -78,3 +81,5 @@ Before going live, use the Firebase Rules Playground (or Firestore emulator with
 - A different UID and writes to unknown/nested collections are denied.
 
 Then sign in as admin, edit the profile, exercise project/certificate CRUD and publication toggles, refresh `/#dashboard` to verify session restoration, and sign out. In a separate signed-out browser, confirm that only published content appears.
+
+After Storage setup, also upload a PDF and ZIP, download published attachments while signed out, unpublish and confirm SDK downloads are denied, remove/replace attachments, and delete the parent record. Confirm non-admin writes and unsupported/oversized uploads fail in Storage Rules Playground or the emulators.

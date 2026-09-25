@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
+import { getStorage } from 'firebase/storage'
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -15,4 +16,8 @@ export const isConfigured = Object.values(config).every(value => value?.trim())
 const firebaseApp = isConfigured ? initializeApp(config) : null
 export const auth = firebaseApp ? getAuth(firebaseApp) : null
 export const db = firebaseApp ? getFirestore(firebaseApp) : null
+// Keep existing link-only deployments working until Storage is enabled.
+const storageBucket = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET?.trim()
+  || (config.projectId ? `${config.projectId}.firebasestorage.app` : '')
+export const storage = firebaseApp ? getStorage(firebaseApp, `gs://${storageBucket}`) : null
 export const isAdmin = user => !!user && !!adminUid && user.uid === adminUid
