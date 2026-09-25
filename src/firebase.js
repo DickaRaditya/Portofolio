@@ -1,0 +1,18 @@
+import { initializeApp } from 'firebase/app'
+import { getAuth } from 'firebase/auth'
+import { getFirestore } from 'firebase/firestore'
+
+const config = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+}
+
+export const adminUid = import.meta.env.VITE_FIREBASE_ADMIN_UID?.trim() || ''
+export const isConfigured = Object.values(config).every(value => value?.trim())
+  && !!adminUid && adminUid !== 'REPLACE_WITH_ADMIN_UID'
+const firebaseApp = isConfigured ? initializeApp(config) : null
+export const auth = firebaseApp ? getAuth(firebaseApp) : null
+export const db = firebaseApp ? getFirestore(firebaseApp) : null
+export const isAdmin = user => !!user && !!adminUid && user.uid === adminUid
