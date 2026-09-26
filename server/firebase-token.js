@@ -40,5 +40,8 @@ export async function verifyFirebaseIdToken(token, projectId) {
   verifier.update(`${parts[0]}.${parts[1]}`)
   verifier.end()
   if (!verifier.verify(cert, Buffer.from(parts[2], 'base64url'))) throw new Error('Invalid Firebase ID token.')
-  return payload
+  // firebase-admin's verifyIdToken() exposes the subject claim as `uid`.
+  // Keep the same shape so callers can use the Admin SDK contract while
+  // verifying tokens without the incompatible auth dependency.
+  return { ...payload, uid: payload.sub }
 }
