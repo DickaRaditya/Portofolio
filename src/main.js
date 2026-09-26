@@ -22,6 +22,24 @@ function safeUrl(value) {
 function validateUrl(value, label) {
   if (value && !safeUrl(value)) throw new Error(`${label} must use an http:// or https:// URL.`)
 }
+function resumePreviewUrl(value) {
+  const safe = safeUrl(value)
+  if (!safe) return ''
+  const url = new URL(safe)
+  if (url.hostname === 'drive.google.com') {
+    const id = url.pathname.match(/^\/file\/d\/([\w-]+)(?:\/|$)/)?.[1] || url.searchParams.get('id')
+    if (!id || !/^[\w-]+$/.test(id)) return ''
+    const preview = new URL(`https://drive.google.com/file/d/${id}/preview`)
+    if (url.searchParams.has('resourcekey')) preview.searchParams.set('resourcekey', url.searchParams.get('resourcekey'))
+    return preview.href
+  }
+  return /\.pdf$/i.test(url.pathname) ? safe : ''
+}
+function resumeSection(profile) {
+  const url = safeUrl(profile.resume_url)
+  const preview = resumePreviewUrl(url)
+  return `<section id="resume" class="resumeSection"><div class="wrap"><div class="sectionHead"><span>01 — RESUME</span><h2>My resume</h2><p class="meta">Read my education, experience, and cybersecurity skills right here.</p></div>${url ? `<div class="card resumeCard"><div class="resumeToolbar"><span>Resume preview</span><a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(url)}">Open in a new tab</a></div>${preview ? `<iframe class="resumePreview" src="${esc(preview)}" title="${esc(profile.full_name || 'Portfolio owner')} — resume" loading="lazy" allow="fullscreen"></iframe><p class="meta resumeHint">If the preview doesn't load, use “Open in a new tab” above.</p>` : '<p class="meta">Use “Open in a new tab” to view this resume.</p>'}</div>` : '<div class="card"><p class="meta">My resume will be available here soon.</p></div>'}</div></section>`
+}
 function errorMessage(error) {
   if (error.code?.startsWith('storage/')) {
     if (error.code === 'storage/unauthorized') return 'File access denied. Check Storage rules and whether the item is published.'
@@ -39,7 +57,7 @@ function errorMessage(error) {
 }
 function shell(content) {
   return `<nav><div class="wrap"><a class="brand" href="#"><span>~/</span>cybersec</a>
-  <div class="navlinks"><a href="#about">About</a><a href="#projects">Projects</a><a href="#certificates">Certificates</a><a href="#resume">Resume</a><a href="#contact">Contact</a>${isAdmin(state.user) ? '<a href="#dashboard">Dashboard</a>' : '<a href="#login">Admin</a>'}</div></div></nav>${content}
+  <div class="navlinks"><a href="#resume">Resume</a><a href="#about">About</a><a href="#projects">Projects</a><a href="#certificates">Certificates</a><a href="#contact">Contact</a>${isAdmin(state.user) ? '<a href="#dashboard">Dashboard</a>' : '<a href="#login">Admin</a>'}</div></div></nav>${content}
   <footer><div class="wrap">© ${new Date().getFullYear()} ${esc(state.profile?.full_name || 'Your Name')} · Cybersecurity Portfolio</div></footer>`
 }
 function notice() {
@@ -54,7 +72,7 @@ function publicPage(){
  return shell(`${notice()}<header class="hero"><div class="wrap heroGrid"><div>
  <div class="eyebrow">CYBERSECURITY PORTFOLIO</div><h1>${esc(p.headline||'Security. Detection. Resilience.')}</h1>
  <p>${esc(p.bio||'Cybersecurity professional focused on defensive security, SOC operations, threat detection and secure infrastructure.')}</p>
- <div class="actions"><a class="btn primary" href="#projects">Explore Projects</a><a class="btn" href="#resume">Resume</a><a class="btn" href="#contact">Contact</a></div>
+ <div class="actions"><a class="btn primary" href="#resume">Read my resume</a><a class="btn" href="#projects">Explore Projects</a><a class="btn" href="#contact">Contact</a></div>
  </div><div class="terminal"><div class="termbar">portfolio@security:~$</div><pre>$ whoami
 ${esc(p.full_name||'Your Name')}
 
@@ -66,10 +84,9 @@ $ status
 [✓] building
 [✓] documenting
 [✓] learning</pre></div></div></header>
- <main><section id="about"><div class="wrap"><div class="sectionHead"><span>01 — ABOUT</span><h2>Perkenalan</h2></div><div class="card"><p>${esc(p.about||p.bio||'Tambahkan perkenalan melalui dashboard admin.')}</p><div class="meta">${esc(p.location||'Indonesia')} · ${esc(p.email||'email@example.com')}</div></div></div></section>
- <section id="projects"><div class="wrap"><div class="sectionHead"><span>02 — PROJECTS</span><h2>Security Projects</h2></div><div class="cards">${state.projects.map(x=>`<article class="card"><div class="tag">${esc(x.category||'Cybersecurity')}</div><h3>${esc(x.title)}</h3><p>${esc(x.description)}</p>${attachmentLinks(x, 'projects')}${x.url?`<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.url))}">Open project link</a>`:''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada project publik.</p></div>'}</div></div></section>
- <section id="certificates"><div class="wrap"><div class="sectionHead"><span>03 — CERTIFICATES & FILES</span><h2>Credentials</h2></div><div class="cards">${state.certificates.map(x=>`<article class="card fileCard"><div><div class="tag">${esc(x.kind||'Document')}</div><h3>${esc(x.title)}</h3><p>${esc(x.description||'')}</p><small>${esc(x.issuer || "")}</small>${attachmentLinks(x, 'certificates')}</div>${x.public_url ? `<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.public_url))}">Open link</a>` : ''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada sertifikat/file publik.</p></div>'}</div></div></section>
- <section id="resume"><div class="wrap"><div class="sectionHead"><span>04 — RESUME</span><h2>My resume</h2></div><div class="card"><p class="meta">Explore my education, experience, and cybersecurity skills.</p>${safeUrl(p.resume_url) ? `<div class="actions"><a class="btn primary" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(p.resume_url))}">View resume <span class="srOnly">(opens in a new tab)</span></a></div>` : '<p class="meta">My resume will be available here soon.</p>'}</div></div></section>
+ <main>${resumeSection(p)}<section id="about"><div class="wrap"><div class="sectionHead"><span>02 — ABOUT</span><h2>Perkenalan</h2></div><div class="card"><p>${esc(p.about||p.bio||'Tambahkan perkenalan melalui dashboard admin.')}</p><div class="meta">${esc(p.location||'Indonesia')} · ${esc(p.email||'email@example.com')}</div></div></div></section>
+ <section id="projects"><div class="wrap"><div class="sectionHead"><span>03 — PROJECTS</span><h2>Security Projects</h2></div><div class="cards">${state.projects.map(x=>`<article class="card"><div class="tag">${esc(x.category||'Cybersecurity')}</div><h3>${esc(x.title)}</h3><p>${esc(x.description)}</p>${attachmentLinks(x, 'projects')}${x.url?`<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.url))}">Open project link</a>`:''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada project publik.</p></div>'}</div></div></section>
+ <section id="certificates"><div class="wrap"><div class="sectionHead"><span>04 — CERTIFICATES & FILES</span><h2>Credentials</h2></div><div class="cards">${state.certificates.map(x=>`<article class="card fileCard"><div><div class="tag">${esc(x.kind||'Document')}</div><h3>${esc(x.title)}</h3><p>${esc(x.description||'')}</p><small>${esc(x.issuer || "")}</small>${attachmentLinks(x, 'certificates')}</div>${x.public_url ? `<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.public_url))}">Open link</a>` : ''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada sertifikat/file publik.</p></div>'}</div></div></section>
  <section id="contact"><div class="wrap"><div class="sectionHead"><span>05 — CONTACT</span><h2>Let's connect</h2></div><div class="card"><p class="meta">Untuk kolaborasi, diskusi security, atau peluang profesional.</p><div class="actions"><a class="btn primary" href="mailto:${esc(p.email||'email@example.com')}">Email</a>${p.github?`<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(p.github))}">GitHub</a>`:''}${p.linkedin?`<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(p.linkedin))}">LinkedIn</a>`:''}</div></div></div></section></main>`)
 }
 
