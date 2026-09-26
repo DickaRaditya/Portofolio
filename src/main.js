@@ -1,7 +1,7 @@
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth'
 import { auth, isAdmin, isConfigured, storageEnabled } from './firebase.js'
 import { deleteContent, loadPortfolio, saveContent, saveProfile } from './data.js'
-import { downloadAttachment, FILE_ACCEPT, fileSize, validateAttachments } from './files.js'
+import { downloadAttachment, getAttachmentUrl, FILE_ACCEPT, fileSize, validateAttachments } from './files.js'
 import './style.css'
 
 const app = document.querySelector('#app')
@@ -290,19 +290,24 @@ app.addEventListener('click', async event => {
   if (!file) return
   const message = button.parentElement.querySelector('.attachmentStatus')
   button.disabled = true
-  message.textContent = 'Downloading…'
+  message.textContent = 'Opening…'
+  const preview = window.open('about:blank', '_blank')
   try {
-    const blob = await downloadAttachment(file)
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = file.name
-    document.body.append(link)
-    link.click()
-    link.remove()
-    setTimeout(() => URL.revokeObjectURL(url), 30000)
-    message.textContent = 'Downloaded.'
-  } catch (error) { message.textContent = errorMessage(error) }
+    if (!preview) throw new Error('The preview tab was blocked. Allow pop-ups and retry.')
+    preview.opener = null
+    if (file.provider === 'r2') {
+      preview.location.href = await getAttachmentUrl(file)
+    } else {
+      const blob = await downloadAttachment(file)
+      const url = URL.createObjectURL(blob)
+      preview.location.href = url
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
+    }
+    message.textContent = 'Opened in a new tab.'
+  } catch (error) {
+    preview?.close()
+    message.textContent = errorMessage(error)
+  }
   finally { button.disabled = false }
 })
 window.addEventListener('hashchange', route)

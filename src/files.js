@@ -73,3 +73,9 @@ export async function downloadAttachment(file) {
   if (!storage) throw new Error('Legacy Firebase storage is not configured.')
   return getBlob(ref(storage, file.path), MAX_FILE_BYTES)
 }
+
+export async function getAttachmentUrl(file) {
+  if (file.provider !== 'r2') return null
+  const { url } = await fileRequest({ action: 'download', path: file.path })
+  return url
+}

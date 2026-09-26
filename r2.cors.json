@@ -1,6 +1,12 @@
 [
   {
-    "AllowedOrigins": ["https://portofolio-theta-ten-80.vercel.app", "http://localhost:5173", "http://127.0.0.1:5173"],
+    "AllowedOrigins": [
+      "https://portofolio-dickaraditya.vercel.app",
+      "https://portofolio-90n4vjke4-dickaraditya.vercel.app",
+      "https://portofolio-theta-ten-80.vercel.app",
+      "http://localhost:5173",
+      "http://127.0.0.1:5173"
+    ],
     "AllowedMethods": ["GET", "PUT", "HEAD"],
     "AllowedHeaders": ["Content-Type", "Cache-Control", "Content-Disposition"],
     "ExposeHeaders": ["ETag", "Content-Length"],

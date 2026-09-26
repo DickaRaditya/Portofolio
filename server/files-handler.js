@@ -65,7 +65,7 @@ export function createFilesHandler(getServices, sign = getSignedUrl) {
         || object.ContentType !== attachment.type) throw fail(409, 'File metadata does not match. Please upload the file again.')
       const url = await sign(s3, new GetObjectCommand({
         Bucket: bucket, Key: body.path,
-        ResponseContentDisposition: `attachment; filename="${safeFilename(attachment.name)}"`,
+        ResponseContentDisposition: `inline; filename="${safeFilename(attachment.name)}"`,
         ResponseCacheControl: 'private, no-store, max-age=0',
       }), { expiresIn: 60 })
       return res.status(200).json({ url })
