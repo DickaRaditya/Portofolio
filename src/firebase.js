@@ -11,9 +11,8 @@ const config = {
 }
 
 export const adminUid = import.meta.env.VITE_FIREBASE_ADMIN_UID?.trim() || ''
-// Spark-plan deployments stay link-only. Set this to "true" only after
-// Cloud Storage is enabled and its rules/CORS are configured.
-export const storageEnabled = import.meta.env.VITE_FIREBASE_ENABLE_STORAGE === 'true'
+// Enable only after the private R2 bucket and server credentials are configured.
+export const storageEnabled = import.meta.env.VITE_R2_ENABLE_UPLOADS === 'true'
 export const isConfigured = Object.values(config).every(value => value?.trim())
   && !!adminUid && adminUid !== 'REPLACE_WITH_ADMIN_UID'
 const firebaseApp = isConfigured ? initializeApp(config) : null

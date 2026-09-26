@@ -72,10 +72,10 @@ export async function saveContent(name, id, data, { files = [], removePaths = []
     // A rejected save should not leave uploaded files behind. All unreferenced
     // objects remain private even if cleanup is interrupted.
     const failed = await removeAttachments(uploaded)
-    if (failed.length) error.message += ' Some unattached uploads need cleanup in Firebase Storage.'
+    if (failed.length) error.message += ' Some unattached uploads need cleanup in file storage.'
     throw error
   }
-  // Commit the metadata first, so removed files become private immediately.
+  // Commit metadata first; no new download URLs can be issued for removed files.
   return { cleanupFailed: await removeAttachments(oldFiles.filter(file => removePaths.includes(file.path))) }
 }
 

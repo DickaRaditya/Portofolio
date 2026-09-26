@@ -6,3 +6,6 @@ dist/
 .vercel/
 .firebase/
 *-debug.log
+migration-backups/
+*service-account*.json
+*firebase-adminsdk*.json
