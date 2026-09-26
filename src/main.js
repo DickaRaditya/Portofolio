@@ -293,17 +293,21 @@ app.addEventListener('click', async event => {
   message.textContent = 'Opening…'
   const preview = window.open('about:blank', '_blank')
   try {
-    if (!preview) throw new Error('The preview tab was blocked. Allow pop-ups and retry.')
-    preview.opener = null
+    if (preview) preview.opener = null
+    let url
     if (file.provider === 'r2') {
-      preview.location.href = await getAttachmentUrl(file)
+      url = await getAttachmentUrl(file)
     } else {
       const blob = await downloadAttachment(file)
-      const url = URL.createObjectURL(blob)
-      preview.location.href = url
+      url = URL.createObjectURL(blob)
       setTimeout(() => URL.revokeObjectURL(url), 60000)
     }
-    message.textContent = 'Opened in a new tab.'
+    if (preview && !preview.closed) {
+      preview.location.href = url
+      message.textContent = 'Opened in a new tab.'
+    } else {
+      window.location.assign(url)
+    }
   } catch (error) {
     preview?.close()
     message.textContent = errorMessage(error)
