@@ -60,7 +60,7 @@ ${esc(p.full_name||'Your Name')}
 
 $ focus
 SOC · SIEM · Blue Team
-Threat Hunting · Cloud Security
+Threat Hunting · Digital Forensics
 
 $ status
 [✓] building
