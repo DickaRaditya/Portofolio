@@ -1,7 +1,7 @@
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
-import { getAuth } from 'firebase-admin/auth'
 import { getFirestore } from 'firebase-admin/firestore'
 import { S3Client } from '@aws-sdk/client-s3'
+import { verifyFirebaseIdToken } from './firebase-token.js'
 
 export function requiredEnv(name) {
   const value = process.env[name]?.trim()
@@ -33,8 +33,10 @@ export function r2Client() {
 }
 export function services() {
   const app = firebaseAdminApp()
+  const projectId = requiredEnv('FIREBASE_PROJECT_ID')
   return {
-    auth: getAuth(app), db: getFirestore(app), s3: r2Client(),
+    auth: { verifyIdToken: token => verifyFirebaseIdToken(token, projectId) },
+    db: getFirestore(app), s3: r2Client(),
     bucket: requiredEnv('R2_BUCKET_NAME'), adminUid: requiredEnv('FIREBASE_ADMIN_UID'),
   }
 }
