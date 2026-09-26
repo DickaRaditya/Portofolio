@@ -39,7 +39,7 @@ function errorMessage(error) {
 }
 function shell(content) {
   return `<nav><div class="wrap"><a class="brand" href="#"><span>~/</span>cybersec</a>
-  <div class="navlinks"><a href="#about">About</a><a href="#projects">Projects</a><a href="#certificates">Certificates</a><a href="#contact">Contact</a>${isAdmin(state.user) ? '<a href="#dashboard">Dashboard</a>' : '<a href="#login">Admin</a>'}</div></div></nav>${content}
+  <div class="navlinks"><a href="#about">About</a><a href="#projects">Projects</a><a href="#certificates">Certificates</a><a href="#resume">Resume</a><a href="#contact">Contact</a>${isAdmin(state.user) ? '<a href="#dashboard">Dashboard</a>' : '<a href="#login">Admin</a>'}</div></div></nav>${content}
   <footer><div class="wrap">© ${new Date().getFullYear()} ${esc(state.profile?.full_name || 'Your Name')} · Cybersecurity Portfolio</div></footer>`
 }
 function notice() {
@@ -69,7 +69,8 @@ $ status
  <main><section id="about"><div class="wrap"><div class="sectionHead"><span>01 — ABOUT</span><h2>Perkenalan</h2></div><div class="card"><p>${esc(p.about||p.bio||'Tambahkan perkenalan melalui dashboard admin.')}</p><div class="meta">${esc(p.location||'Indonesia')} · ${esc(p.email||'email@example.com')}</div></div></div></section>
  <section id="projects"><div class="wrap"><div class="sectionHead"><span>02 — PROJECTS</span><h2>Security Projects</h2></div><div class="cards">${state.projects.map(x=>`<article class="card"><div class="tag">${esc(x.category||'Cybersecurity')}</div><h3>${esc(x.title)}</h3><p>${esc(x.description)}</p>${attachmentLinks(x, 'projects')}${x.url?`<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.url))}">Open project link</a>`:''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada project publik.</p></div>'}</div></div></section>
  <section id="certificates"><div class="wrap"><div class="sectionHead"><span>03 — CERTIFICATES & FILES</span><h2>Credentials</h2></div><div class="cards">${state.certificates.map(x=>`<article class="card fileCard"><div><div class="tag">${esc(x.kind||'Document')}</div><h3>${esc(x.title)}</h3><p>${esc(x.description||'')}</p><small>${esc(x.issuer || "")}</small>${attachmentLinks(x, 'certificates')}</div>${x.public_url ? `<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.public_url))}">Open link</a>` : ''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada sertifikat/file publik.</p></div>'}</div></div></section>
- <section id="contact"><div class="wrap"><div class="sectionHead"><span>04 — CONTACT</span><h2>Let's connect</h2></div><div class="card"><p class="meta">Untuk kolaborasi, diskusi security, atau peluang profesional.</p><div class="actions"><a class="btn primary" href="mailto:${esc(p.email||'email@example.com')}">Email</a>${p.github?`<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(p.github))}">GitHub</a>`:''}${p.linkedin?`<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(p.linkedin))}">LinkedIn</a>`:''}</div></div></div></section></main>`)
+ <section id="resume"><div class="wrap"><div class="sectionHead"><span>04 — RESUME</span><h2>My resume</h2></div><div class="card"><p class="meta">Explore my education, experience, and cybersecurity skills.</p>${safeUrl(p.resume_url) ? `<div class="actions"><a class="btn primary" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(p.resume_url))}">View resume <span class="srOnly">(opens in a new tab)</span></a></div>` : '<p class="meta">My resume will be available here soon.</p>'}</div></div></section>
+ <section id="contact"><div class="wrap"><div class="sectionHead"><span>05 — CONTACT</span><h2>Let's connect</h2></div><div class="card"><p class="meta">Untuk kolaborasi, diskusi security, atau peluang profesional.</p><div class="actions"><a class="btn primary" href="mailto:${esc(p.email||'email@example.com')}">Email</a>${p.github?`<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(p.github))}">GitHub</a>`:''}${p.linkedin?`<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(p.linkedin))}">LinkedIn</a>`:''}</div></div></div></section></main>`)
 }
 
 function loginPage() {
@@ -92,6 +93,7 @@ function dashboard() {
   <section><div class="sectionHead"><span>PROFILE</span><h2>Public identity</h2></div><form id="profileForm" class="formGrid card">
   ${[['full_name', 'Nama lengkap'], ['headline', 'Headline'], ['location', 'Lokasi'], ['email', 'Email'], ['github', 'GitHub URL'], ['linkedin', 'LinkedIn URL']].map(([key, label]) => `<label>${label}<input name="${key}" type="${key === 'email' ? 'email' : ['github', 'linkedin'].includes(key) ? 'url' : 'text'}" value="${esc(state.profile?.[key] || '')}"></label>`).join('')}
   <label class="wide">Bio<textarea name="bio">${esc(state.profile?.bio || '')}</textarea></label><label class="wide">About<textarea name="about">${esc(state.profile?.about || '')}</textarea></label>
+  <label class="wide">Resume URL (optional)<input name="resume_url" type="url" placeholder="https://..." aria-describedby="resumeHint" value="${esc(state.profile?.resume_url || '')}"></label><p id="resumeHint" class="wide meta">Paste a public link to your resume, such as a Google Drive PDF with “Anyone with the link” access. Clear this field to remove the resume link.</p>
   <label class="check"><input name="published" type="checkbox" ${state.profile?.published !== false ? 'checked' : ''}> Published</label><button class="btn primary">Save profile</button></form></section>
   <section><div class="sectionHead"><span>PROJECTS</span><h2>Manage projects</h2></div><form id="projectForm" class="card formGrid"><input type="hidden" name="id"><label>Title<input name="title" required></label><label>Category<input name="category"></label><label class="wide">Description<textarea name="description"></textarea></label><label>Project URL (optional)<input name="url" type="url"></label><label>Sort order<input name="sort_order" type="number" step="1" value="0" required></label>${uploadFields()}<label class="check"><input name="published" type="checkbox" checked> Published</label><div class="actions"><button class="btn primary">Save project</button><button class="btn" type="reset">Cancel / New</button></div></form>
   <div class="cards">${state.projects.map(item => adminItem(item, 'projects')).join('')}</div></section>
@@ -138,7 +140,7 @@ async function route() {
     : admin ? dashboard() : publicPage()
   document.querySelector('#retry')?.addEventListener('click', route)
   if (admin) bindDashboard()
-  else if (['about', 'projects', 'certificates', 'contact'].includes(path)) {
+  else if (['about', 'projects', 'certificates', 'resume', 'contact'].includes(path)) {
     document.getElementById(path)?.scrollIntoView()
   }
 }
@@ -214,6 +216,8 @@ function bindDashboard() {
     void mutate(form.querySelector('button'), async () => {
       validateUrl(data.github, 'GitHub URL')
       validateUrl(data.linkedin, 'LinkedIn URL')
+      data.resume_url = data.resume_url.trim()
+      validateUrl(data.resume_url, 'Resume URL')
       await saveProfile(data)
     }, 'Profile saved.')
   })
