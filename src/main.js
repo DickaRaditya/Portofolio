@@ -54,7 +54,7 @@ function publicPage(){
  return shell(`${notice()}<header class="hero"><div class="wrap heroGrid"><div>
  <div class="eyebrow">CYBERSECURITY PORTFOLIO</div><h1>${esc(p.headline||'Security. Detection. Resilience.')}</h1>
  <p>${esc(p.bio||'Cybersecurity professional focused on defensive security, SOC operations, threat detection and secure infrastructure.')}</p>
- <div class="actions"><a class="btn primary" href="#projects">Explore Projects</a><a class="btn" href="#contact">Contact</a></div>
+ <div class="actions"><a class="btn primary" href="#projects">Explore Projects</a><a class="btn" href="#resume">Resume</a><a class="btn" href="#contact">Contact</a></div>
  </div><div class="terminal"><div class="termbar">portfolio@security:~$</div><pre>$ whoami
 ${esc(p.full_name||'Your Name')}
 
