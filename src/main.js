@@ -42,12 +42,33 @@ function resumeSection(profile) {
   const preview = resumePreviewUrl(url)
   return `<section id="resume" class="resumeSection"><div class="wrap"><div class="sectionHead"><span>01 — RESUME</span><h2>My resume</h2><p class="meta">Read my education, experience, and cybersecurity skills right here.</p></div>${url ? `<div class="card resumeCard"><div class="resumeToolbar"><span>Resume preview</span><a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(url)}">Open in a new tab</a></div>${preview ? `<iframe class="resumePreview" src="${esc(preview)}" title="${esc(profile.full_name || 'Portfolio owner')} — resume" loading="lazy" allow="fullscreen"></iframe><p class="meta resumeHint">If the preview doesn't load, use “Open in a new tab” above.</p>` : '<p class="meta">Use “Open in a new tab” to view this resume.</p>'}</div>` : '<div class="card"><p class="meta">My resume will be available here soon.</p></div>'}</div></section>`
 }
-function certificatePreview(item) {
+function cardPreviewUrl(value) {
+  const fileUrl = resumePreviewUrl(value)
+  if (fileUrl) return fileUrl
+  const safe = safeUrl(value)
+  if (!safe) return ''
+  const url = new URL(safe)
+  const folderId = url.hostname === 'drive.google.com' && url.pathname.match(/^\/drive\/(?:u\/\d+\/)?folders\/([\w-]+)(?:\/|$)/)?.[1]
+  if (folderId) {
+    const preview = new URL('https://drive.google.com/embeddedfolderview')
+    preview.searchParams.set('id', folderId)
+    if (url.searchParams.has('resourcekey')) preview.searchParams.set('resourcekey', url.searchParams.get('resourcekey'))
+    preview.hash = 'grid'
+    return preview.href
+  }
+  if (url.hostname === 'docs.google.com') {
+    const document = url.pathname.match(/^\/(document|spreadsheets|presentation)\/d\/([\w-]+)(?:\/|$)/)
+    if (document) return `https://docs.google.com/${document[1]}/d/${document[2]}/${document[1] === 'presentation' ? 'embed' : 'preview'}`
+  }
+  return ''
+}
+function cardPreview(item, collection) {
   const index = (item.attachments || []).findIndex(file => /\.(pdf|png|jpe?g|webp)$/i.test(file.name))
-  if (index !== -1) return `<div class="filePreview" data-preview-id="${esc(item.id)}" data-preview-index="${index}"><p class="meta" role="status">Loading preview…</p></div>`
-  const url = resumePreviewUrl(item.public_url)
+  if (index !== -1) return `<div class="filePreview" data-preview-collection="${collection}" data-preview-id="${esc(item.id)}" data-preview-index="${index}"><p class="meta" role="status">Loading preview…</p></div>`
+  const link = collection === 'projects' ? item.url : item.public_url
+  const url = cardPreviewUrl(link)
   if (url) return `<div class="filePreview"><iframe src="${esc(url)}" title="${esc(item.title)} — preview" loading="lazy" allow="fullscreen"></iframe></div>`
-  const imageUrl = safeUrl(item.public_url)
+  const imageUrl = safeUrl(link)
   if (imageUrl && /\.(png|jpe?g|webp)$/i.test(new URL(imageUrl).pathname)) return `<div class="filePreview"><img src="${esc(imageUrl)}" alt="${esc(item.title)}" loading="lazy"></div>`
   return ''
 }
@@ -68,7 +89,7 @@ function bindFilePreviews() {
   document.querySelectorAll('[data-preview-id]').forEach(element => previewObserver.observe(element))
 }
 async function loadFilePreview(container, version) {
-  const item = state.certificates.find(item => item.id === container.dataset.previewId)
+  const item = state[container.dataset.previewCollection]?.find(item => item.id === container.dataset.previewId)
   const file = item?.attachments?.[Number(container.dataset.previewIndex)]
   if (!file) return
   try {
@@ -144,8 +165,8 @@ $ status
 [✓] documenting
 [✓] learning</pre></div></div></header>
  <main>${resumeSection(p)}<section id="about"><div class="wrap"><div class="sectionHead"><span>02 — ABOUT</span><h2>Perkenalan</h2></div><div class="card"><p>${esc(p.about||p.bio||'Tambahkan perkenalan melalui dashboard admin.')}</p><div class="meta">${esc(p.location||'Indonesia')} · ${esc(p.email||'email@example.com')}</div></div></div></section>
- <section id="projects"><div class="wrap"><div class="sectionHead"><span>03 — PROJECTS</span><h2>Security Projects</h2></div><div class="cards">${state.projects.map(x=>`<article class="card"><div class="tag">${esc(x.category||'Cybersecurity')}</div><h3>${esc(x.title)}</h3><p>${esc(x.description)}</p>${attachmentLinks(x, 'projects')}${x.url?`<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.url))}">Open project link</a>`:''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada project publik.</p></div>'}</div></div></section>
- <section id="certificates"><div class="wrap"><div class="sectionHead"><span>04 — CERTIFICATES & FILES</span><h2>Credentials</h2></div><div class="cards">${state.certificates.map(x=>`<article class="card fileCard"><div class="fileCardContent"><div class="tag">${esc(x.kind||'Document')}</div><h3>${esc(x.title)}</h3>${x.description ? `<p>${esc(x.description)}</p>` : ''}<small>${esc(x.issuer || "")}</small>${certificatePreview(x)}${attachmentLinks(x, 'certificates')}</div>${x.public_url ? `<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.public_url))}">Open link</a>` : ''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada sertifikat/file publik.</p></div>'}</div></div></section>
+ <section id="projects"><div class="wrap"><div class="sectionHead"><span>03 — PROJECTS</span><h2>Security Projects</h2></div><div class="cards">${state.projects.map(x=>`<article class="card projectCard"><div class="tag">${esc(x.category||'Cybersecurity')}</div><h3>${esc(x.title)}</h3>${cardPreview(x, 'projects')}<p>${esc(x.description)}</p>${attachmentLinks(x, 'projects')}${x.url?`<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.url))}">Open project link</a>`:''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada project publik.</p></div>'}</div></div></section>
+ <section id="certificates"><div class="wrap"><div class="sectionHead"><span>04 — CERTIFICATES & FILES</span><h2>Credentials</h2></div><div class="cards">${state.certificates.map(x=>`<article class="card fileCard"><div class="fileCardContent"><div class="tag">${esc(x.kind||'Document')}</div><h3>${esc(x.title)}</h3>${x.description ? `<p>${esc(x.description)}</p>` : ''}<small>${esc(x.issuer || "")}</small>${cardPreview(x, 'certificates')}${attachmentLinks(x, 'certificates')}</div>${x.public_url ? `<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.public_url))}">Open link</a>` : ''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada sertifikat/file publik.</p></div>'}</div></div></section>
  <section id="contact"><div class="wrap"><div class="sectionHead"><span>05 — CONTACT</span><h2>Let's connect</h2></div><div class="card"><p class="meta">Untuk kolaborasi, diskusi security, atau peluang profesional.</p><div class="actions"><a class="btn primary" href="mailto:${esc(p.email||'email@example.com')}">Email</a>${p.github?`<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(p.github))}">GitHub</a>`:''}${p.linkedin?`<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(p.linkedin))}">LinkedIn</a>`:''}</div></div></div></section></main>`)
 }
 
