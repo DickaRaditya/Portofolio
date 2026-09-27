@@ -2,6 +2,7 @@ import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebas
 import { auth, isAdmin, isConfigured, storageEnabled } from './firebase.js'
 import { deleteContent, loadPortfolio, saveContent, saveProfile } from './data.js'
 import { downloadAttachment, getAttachmentUrl, FILE_ACCEPT, fileSize, validateAttachments } from './files.js'
+import { experienceSection, skillsSection, bindJourney } from './journey.js'
 import './style.css'
 
 const app = document.querySelector('#app')
@@ -137,7 +138,7 @@ function errorMessage(error) {
 }
 function shell(content) {
   return `<nav><div class="wrap"><a class="brand" href="#"><span>~/</span>cybersec</a>
-  <div class="navlinks"><a href="#resume">Resume</a><a href="#about">About</a><a href="#projects">Projects</a><a href="#certificates">Certificates</a><a href="#contact">Contact</a>${isAdmin(state.user) ? '<a href="#dashboard">Dashboard</a>' : '<a href="#login">Admin</a>'}</div></div></nav>${content}
+  <div class="navlinks"><a href="#resume">Resume</a><a href="#about">About</a><a href="#experience">Experience</a><a href="#skills">Skills</a><a href="#projects">Projects</a><a href="#certificates">Certificates</a><a href="#contact">Contact</a>${isAdmin(state.user) ? '<a href="#dashboard">Dashboard</a>' : '<a href="#login">Admin</a>'}</div></div></nav>${content}
   <footer><div class="wrap">© ${new Date().getFullYear()} ${esc(state.profile?.full_name || 'Your Name')} · Cybersecurity Portfolio</div></footer>`
 }
 function notice() {
@@ -165,9 +166,10 @@ $ status
 [✓] documenting
 [✓] learning</pre></div></div></header>
  <main>${resumeSection(p)}<section id="about"><div class="wrap"><div class="sectionHead"><span>02 — ABOUT</span><h2>Perkenalan</h2></div><div class="card"><p>${esc(p.about||p.bio||'Tambahkan perkenalan melalui dashboard admin.')}</p><div class="meta">${esc(p.location||'Indonesia')} · ${esc(p.email||'email@example.com')}</div></div></div></section>
- <section id="projects"><div class="wrap"><div class="sectionHead"><span>03 — PROJECTS</span><h2>Security Projects</h2></div><div class="cards">${state.projects.map(x=>`<article class="card projectCard"><div class="tag">${esc(x.category||'Cybersecurity')}</div><h3>${esc(x.title)}</h3>${cardPreview(x, 'projects')}<p>${esc(x.description)}</p>${attachmentLinks(x, 'projects')}${x.url?`<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.url))}">Open project link</a>`:''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada project publik.</p></div>'}</div></div></section>
- <section id="certificates"><div class="wrap"><div class="sectionHead"><span>04 — CERTIFICATES & FILES</span><h2>Credentials</h2></div><div class="cards">${state.certificates.map(x=>`<article class="card fileCard"><div class="fileCardContent"><div class="tag">${esc(x.kind||'Document')}</div><h3>${esc(x.title)}</h3>${x.description ? `<p>${esc(x.description)}</p>` : ''}<small>${esc(x.issuer || "")}</small>${cardPreview(x, 'certificates')}${attachmentLinks(x, 'certificates')}</div>${x.public_url ? `<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.public_url))}">Open link</a>` : ''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada sertifikat/file publik.</p></div>'}</div></div></section>
- <section id="contact"><div class="wrap"><div class="sectionHead"><span>05 — CONTACT</span><h2>Let's connect</h2></div><div class="card"><p class="meta">Untuk kolaborasi, diskusi security, atau peluang profesional.</p><div class="actions"><a class="btn primary" target="_blank" rel="noopener noreferrer" href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=${esc(encodeURIComponent(p.email||'email@example.com'))}">Email via Gmail</a>${p.github?`<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(p.github))}">GitHub</a>`:''}${p.linkedin?`<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(p.linkedin))}">LinkedIn</a>`:''}</div></div></div></section></main>`)
+ ${experienceSection()}${skillsSection()}
+ <section id="projects"><div class="wrap"><div class="sectionHead"><span>05 — PROJECTS</span><h2>Security Projects</h2></div><div class="cards">${state.projects.map(x=>`<article class="card projectCard"><div class="tag">${esc(x.category||'Cybersecurity')}</div><h3>${esc(x.title)}</h3>${cardPreview(x, 'projects')}<p>${esc(x.description)}</p>${attachmentLinks(x, 'projects')}${x.url?`<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.url))}">Open project link</a>`:''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada project publik.</p></div>'}</div></div></section>
+ <section id="certificates"><div class="wrap"><div class="sectionHead"><span>06 — CERTIFICATES & FILES</span><h2>Credentials</h2></div><div class="cards">${state.certificates.map(x=>`<article class="card fileCard"><div class="fileCardContent"><div class="tag">${esc(x.kind||'Document')}</div><h3>${esc(x.title)}</h3>${x.description ? `<p>${esc(x.description)}</p>` : ''}<small>${esc(x.issuer || "")}</small>${cardPreview(x, 'certificates')}${attachmentLinks(x, 'certificates')}</div>${x.public_url ? `<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.public_url))}">Open link</a>` : ''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada sertifikat/file publik.</p></div>'}</div></div></section>
+ <section id="contact"><div class="wrap"><div class="sectionHead"><span>07 — CONTACT</span><h2>Let's connect</h2></div><div class="card"><p class="meta">Untuk kolaborasi, diskusi security, atau peluang profesional.</p><div class="actions"><a class="btn primary" target="_blank" rel="noopener noreferrer" href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=${esc(encodeURIComponent(p.email||'email@example.com'))}">Email via Gmail</a>${p.github?`<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(p.github))}">GitHub</a>`:''}${p.linkedin?`<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(p.linkedin))}">LinkedIn</a>`:''}</div></div></div></section></main>`)
 }
 
 function loginPage() {
@@ -236,9 +238,9 @@ async function route() {
     ? shell(`<main class="dashboard"><div class="wrap">${notice()}<button id="logout" class="btn">Sign out</button></div></main>`)
     : admin ? dashboard() : publicPage()
   document.querySelector('#retry')?.addEventListener('click', route)
-  if (!admin) bindFilePreviews()
+  if (!admin) { bindFilePreviews(); bindJourney(app) }
   if (admin) bindDashboard()
-  else if (['about', 'projects', 'certificates', 'resume', 'contact'].includes(path)) {
+  else if (['about', 'experience', 'skills', 'projects', 'certificates', 'resume', 'contact'].includes(path)) {
     document.getElementById(path)?.scrollIntoView()
   }
 }
