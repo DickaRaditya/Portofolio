@@ -11,6 +11,8 @@ let routeVersion = 0
 let authReady = !auth
 let signingIn = false
 let loginMessage = ''
+let previewObserver
+const previewObjectUrls = new Set()
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 function safeUrl(value) {
@@ -39,6 +41,63 @@ function resumeSection(profile) {
   const url = safeUrl(profile.resume_url)
   const preview = resumePreviewUrl(url)
   return `<section id="resume" class="resumeSection"><div class="wrap"><div class="sectionHead"><span>01 — RESUME</span><h2>My resume</h2><p class="meta">Read my education, experience, and cybersecurity skills right here.</p></div>${url ? `<div class="card resumeCard"><div class="resumeToolbar"><span>Resume preview</span><a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(url)}">Open in a new tab</a></div>${preview ? `<iframe class="resumePreview" src="${esc(preview)}" title="${esc(profile.full_name || 'Portfolio owner')} — resume" loading="lazy" allow="fullscreen"></iframe><p class="meta resumeHint">If the preview doesn't load, use “Open in a new tab” above.</p>` : '<p class="meta">Use “Open in a new tab” to view this resume.</p>'}</div>` : '<div class="card"><p class="meta">My resume will be available here soon.</p></div>'}</div></section>`
+}
+function certificatePreview(item) {
+  const index = (item.attachments || []).findIndex(file => /\.(pdf|png|jpe?g|webp)$/i.test(file.name))
+  if (index !== -1) return `<div class="filePreview" data-preview-id="${esc(item.id)}" data-preview-index="${index}"><p class="meta" role="status">Loading preview…</p></div>`
+  const url = resumePreviewUrl(item.public_url)
+  if (url) return `<div class="filePreview"><iframe src="${esc(url)}" title="${esc(item.title)} — preview" loading="lazy" allow="fullscreen"></iframe></div>`
+  const imageUrl = safeUrl(item.public_url)
+  if (imageUrl && /\.(png|jpe?g|webp)$/i.test(new URL(imageUrl).pathname)) return `<div class="filePreview"><img src="${esc(imageUrl)}" alt="${esc(item.title)}" loading="lazy"></div>`
+  return ''
+}
+function clearFilePreviews() {
+  previewObserver?.disconnect()
+  for (const url of previewObjectUrls) URL.revokeObjectURL(url)
+  previewObjectUrls.clear()
+}
+function bindFilePreviews() {
+  const version = routeVersion
+  previewObserver = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue
+      previewObserver.unobserve(entry.target)
+      void loadFilePreview(entry.target, version)
+    }
+  }, { rootMargin: '200px' })
+  document.querySelectorAll('[data-preview-id]').forEach(element => previewObserver.observe(element))
+}
+async function loadFilePreview(container, version) {
+  const item = state.certificates.find(item => item.id === container.dataset.previewId)
+  const file = item?.attachments?.[Number(container.dataset.previewIndex)]
+  if (!file) return
+  try {
+    let url
+    if (file.provider === 'r2') {
+      url = await getAttachmentUrl(file)
+    } else {
+      const blob = await downloadAttachment(file)
+      if (version !== routeVersion) return
+      url = URL.createObjectURL(blob)
+      previewObjectUrls.add(url)
+    }
+    if (version !== routeVersion || !container.isConnected) return
+    const isPdf = /\.pdf$/i.test(file.name)
+    const preview = document.createElement(isPdf ? 'iframe' : 'img')
+    if (isPdf) {
+      preview.title = `${item.title} — preview`
+      preview.src = `${url}#toolbar=0&navpanes=0&view=Fit`
+    } else {
+      preview.alt = item.title || file.name
+      preview.src = url
+    }
+    preview.addEventListener('error', () => {
+      container.innerHTML = '<p class="meta" role="status">Preview unavailable. Use the file button below to open it.</p>'
+    })
+    container.replaceChildren(preview)
+  } catch {
+    if (version === routeVersion && container.isConnected) container.innerHTML = '<p class="meta" role="status">Preview unavailable. Use the file button below to open it.</p>'
+  }
 }
 function errorMessage(error) {
   if (error.code?.startsWith('storage/')) {
@@ -86,7 +145,7 @@ $ status
 [✓] learning</pre></div></div></header>
  <main>${resumeSection(p)}<section id="about"><div class="wrap"><div class="sectionHead"><span>02 — ABOUT</span><h2>Perkenalan</h2></div><div class="card"><p>${esc(p.about||p.bio||'Tambahkan perkenalan melalui dashboard admin.')}</p><div class="meta">${esc(p.location||'Indonesia')} · ${esc(p.email||'email@example.com')}</div></div></div></section>
  <section id="projects"><div class="wrap"><div class="sectionHead"><span>03 — PROJECTS</span><h2>Security Projects</h2></div><div class="cards">${state.projects.map(x=>`<article class="card"><div class="tag">${esc(x.category||'Cybersecurity')}</div><h3>${esc(x.title)}</h3><p>${esc(x.description)}</p>${attachmentLinks(x, 'projects')}${x.url?`<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.url))}">Open project link</a>`:''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada project publik.</p></div>'}</div></div></section>
- <section id="certificates"><div class="wrap"><div class="sectionHead"><span>04 — CERTIFICATES & FILES</span><h2>Credentials</h2></div><div class="cards">${state.certificates.map(x=>`<article class="card fileCard"><div><div class="tag">${esc(x.kind||'Document')}</div><h3>${esc(x.title)}</h3><p>${esc(x.description||'')}</p><small>${esc(x.issuer || "")}</small>${attachmentLinks(x, 'certificates')}</div>${x.public_url ? `<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.public_url))}">Open link</a>` : ''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada sertifikat/file publik.</p></div>'}</div></div></section>
+ <section id="certificates"><div class="wrap"><div class="sectionHead"><span>04 — CERTIFICATES & FILES</span><h2>Credentials</h2></div><div class="cards">${state.certificates.map(x=>`<article class="card fileCard"><div class="fileCardContent"><div class="tag">${esc(x.kind||'Document')}</div><h3>${esc(x.title)}</h3>${x.description ? `<p>${esc(x.description)}</p>` : ''}<small>${esc(x.issuer || "")}</small>${certificatePreview(x)}${attachmentLinks(x, 'certificates')}</div>${x.public_url ? `<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.public_url))}">Open link</a>` : ''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada sertifikat/file publik.</p></div>'}</div></div></section>
  <section id="contact"><div class="wrap"><div class="sectionHead"><span>05 — CONTACT</span><h2>Let's connect</h2></div><div class="card"><p class="meta">Untuk kolaborasi, diskusi security, atau peluang profesional.</p><div class="actions"><a class="btn primary" href="mailto:${esc(p.email||'email@example.com')}">Email</a>${p.github?`<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(p.github))}">GitHub</a>`:''}${p.linkedin?`<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(p.linkedin))}">LinkedIn</a>`:''}</div></div></div></section></main>`)
 }
 
@@ -123,6 +182,7 @@ function adminItem(item, collection) {
 
 async function route() {
   const version = ++routeVersion
+  clearFilePreviews()
   if (!authReady) {
     app.innerHTML = shell('<main class="auth"><p class="meta" role="status">Loading…</p></main>')
     return
@@ -155,6 +215,7 @@ async function route() {
     ? shell(`<main class="dashboard"><div class="wrap">${notice()}<button id="logout" class="btn">Sign out</button></div></main>`)
     : admin ? dashboard() : publicPage()
   document.querySelector('#retry')?.addEventListener('click', route)
+  if (!admin) bindFilePreviews()
   if (admin) bindDashboard()
   else if (['about', 'projects', 'certificates', 'resume', 'contact'].includes(path)) {
     document.getElementById(path)?.scrollIntoView()
