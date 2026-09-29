@@ -1,6 +1,8 @@
 [
   {
     "AllowedOrigins": [
+      "https://kotartos.my.id",
+      "https://www.kotartos.my.id",
       "https://portofolio-dickaraditya.vercel.app",
       "https://portofolio-90n4vjke4-dickaraditya.vercel.app",
       "https://portofolio-theta-ten-80.vercel.app",

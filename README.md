@@ -52,6 +52,8 @@ Apply copies referenced Firebase files, verifies SHA-256 from R2, backs up metad
 
 ## Verification and deployment
 
+For the migration to `kotartos.my.id` while keeping the existing Vercel address active as a redirect, follow [DOMAIN_MIGRATION.md](DOMAIN_MIGRATION.md). The CORS JSON files include the new origins, but their policies must also be applied to the live buckets.
+
 ```sh
 npm test
 npm run build

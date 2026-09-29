@@ -1,6 +1,6 @@
 [
   {
-    "origin": ["https://portofolio-theta-ten-80.vercel.app", "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:4173"],
+    "origin": ["https://kotartos.my.id", "https://www.kotartos.my.id", "https://portofolio-theta-ten-80.vercel.app", "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:4173"],
     "method": ["GET"],
     "responseHeader": ["Content-Type", "Content-Disposition"],
     "maxAgeSeconds": 3600
