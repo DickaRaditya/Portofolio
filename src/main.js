@@ -119,9 +119,9 @@ function errorMessage(error) {
   return error.message || 'Something went wrong. Please try again.'
 }
 function shell(content) {
-  return `<nav><div class="wrap"><a class="brand" href="#"><span>~/</span>cybersec</a>
+  return `<nav><div class="wrap"><a class="brand" href="#"><span>~/</span>Dicka Raditya's Portofolio</a>
   <div class="navlinks"><a href="#about">About</a><a href="#resume">Resume</a><a href="#experience">Experience</a><a href="#skills">Skills</a><a href="#projects">Projects</a><a href="#certificates">Certificates</a><a href="#contact">Contact</a>${isAdmin(state.user) ? '<a href="#dashboard">Dashboard</a>' : '<a href="#login">Admin</a>'}</div></div></nav>${content}
-  <footer><div class="wrap">© ${new Date().getFullYear()} ${esc(state.profile?.full_name || 'Your Name')} · Cybersecurity Portfolio</div></footer>`
+  <footer><div class="wrap">© ${new Date().getFullYear()} ${esc(state.profile?.full_name || 'Your Name')} · Dicka Raditya's Portofolio</div></footer>`
 }
 function notice() {
   const message = !isConfigured
@@ -133,7 +133,7 @@ function notice() {
 function publicPage(){
  const p=state.profile||{}
  return shell(`${notice()}<header class="hero"><div class="wrap heroGrid"><div>
- <div class="eyebrow">CYBERSECURITY PORTFOLIO</div><h1>${esc(p.headline||'Security. Detection. Resilience.')}</h1>
+ <div class="eyebrow">Dicka Raditya Cysec</div><h1>${esc(p.headline||'Security. Detection. Resilience.')}</h1>
  <p>${esc(p.bio||'Cybersecurity professional focused on defensive security, SOC operations, threat detection and secure infrastructure.')}</p>
  <div class="actions"><a class="btn primary" href="#resume">Read my resume</a><a class="btn" href="#projects">Explore Projects</a><a class="btn" href="#contact">Contact</a></div>
  </div><div class="terminal"><div class="termbar">portfolio@security:~$</div><pre>$ whoami

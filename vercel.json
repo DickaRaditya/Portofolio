@@ -6,6 +6,18 @@
   "outputDirectory": "dist",
   "redirects": [
     {
+      "source": "/",
+      "has": [{ "type": "host", "value": "portofolio-theta-ten-80.vercel.app" }],
+      "destination": "https://kotartos.my.id/",
+      "permanent": true
+    },
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "www.kotartos.my.id" }],
+      "destination": "https://kotartos.my.id/",
+      "permanent": true
+    },
+    {
       "source": "/:path*",
       "has": [{ "type": "host", "value": "portofolio-theta-ten-80.vercel.app" }],
       "destination": "https://kotartos.my.id/:path*",
