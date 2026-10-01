@@ -57,6 +57,18 @@ nav .wrap { min-height: 84px; height: auto; gap: 28px; }
 .profilePhotoSettings { margin: 0; padding: 18px; min-width: 0; border: 1px solid var(--line); border-radius: 12px; background: #f5f7ef; }
 .profilePhotoSettings legend { padding: 0 6px; color: var(--accent); font-weight: 650; }
 .profilePhotoPreview { margin: 4px 0 16px; }
+.profilePhotoControls { display: grid; gap: 10px; min-width: 0; }
+.profilePhotoControls > label { min-width: 0; font-size: 14px; }
+.profilePhotoControls input[type=file] { min-width: 0; max-width: 100%; }
+.profilePhotoControls input[aria-invalid=true] { border-color: var(--danger); }
+.photoSelection { margin: 0; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.photoSelection:empty { display: none; }
+.photoSelection.error { color: var(--danger); min-height: 0; }
+.photoActions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.photoActions:not(:has(> button:not([hidden]))) { display: none; }
+.photoActions .btn { font-size: 12px; padding: 7px 10px; }
+.photoActions > [hidden] { display: none; }
+.photoUrlField { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
 .photoHint { margin: 8px 0 0; font-size: 13px; line-height: 1.7; }
 .terminal { border-radius: 14px; background: #14291f; border-color: #314b39; box-shadow: 0 22px 50px #2747351b; font-size: 13px; }
 .termbar { padding: 14px 18px; background: #20362a; }

@@ -4,6 +4,7 @@ import {
 } from 'firebase/firestore'
 import { auth, db, isAdmin } from './firebase.js'
 import { removeAttachments, uploadAttachment, validateAttachments } from './files.js'
+import { validateProfilePhoto } from '../shared/file-policy.js'
 
 const records = snapshot => snapshot.docs.map(item => ({ ...item.data(), id: item.id }))
 const editableCollections = new Set(['projects', 'certificates'])
@@ -38,9 +39,33 @@ export async function loadPortfolio(admin = false) {
   }
 }
 
-export async function saveProfile(data) {
+export async function saveProfile(data, { photoFile = null, removePhoto = false, onProgress } = {}) {
   requireAdmin()
-  await setDoc(doc(db, 'profile', 'main'), { ...data, updated_at: serverTimestamp() })
+  if (photoFile) validateProfilePhoto(photoFile)
+  const target = doc(db, 'profile', 'main')
+  const existing = await getDoc(target)
+  const oldPhoto = existing.data()?.photo
+  // Photo metadata must come from the current record or a completed upload.
+  const { photo: ignoredPhoto, ...profileData } = data
+  const next = { ...profileData, updated_at: serverTimestamp() }
+  const replacingPhoto = !!photoFile || removePhoto || (typeof data.photo_url === 'string' && !!data.photo_url.trim())
+  const uploaded = []
+  try {
+    if (photoFile) {
+      const photo = await uploadAttachment('profile', 'main', photoFile,
+        percent => onProgress?.(`Uploading profile photo: ${photoFile.name} (${percent}%)`))
+      uploaded.push(photo)
+      next.photo = photo
+      next.photo_url = ''
+    } else if (oldPhoto && !replacingPhoto) next.photo = oldPhoto
+    await setDoc(target, next)
+  } catch (error) {
+    const failed = await removeAttachments(uploaded)
+    if (failed.length) error.message += ' Some unattached uploads need cleanup in file storage.'
+    throw error
+  }
+  // Revoke the old photo in metadata before removing it from file storage.
+  return { cleanupFailed: await removeAttachments(oldPhoto && replacingPhoto ? [oldPhoto] : []) }
 }
 
 export async function saveContent(name, id, data, { files = [], removePaths = [], onProgress } = {}) {

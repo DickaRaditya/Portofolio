@@ -57,6 +57,16 @@ test('failed transfer cleans the allocated R2 key and reports failed cleanup', a
   await assert.rejects(() => uploadAttachment('projects', 'test', { name: 'report.pdf', size: 100 }), /cleanup in R2/)
 })
 
+test('profile uploads reject non-images and images over 5 MB before requesting an upload URL', async () => {
+  admin()
+  for (const file of [{ name: 'document.pdf', size: 100 }, { name: 'large.jpg', size: 5 * 1024 * 1024 + 1 }, { name: 'empty.png', size: 0 }]) {
+    await assert.rejects(() => uploadAttachment('profile', 'main', file))
+  }
+  assert.equal(requests.length, 0)
+  await uploadAttachment('profile', 'main', { name: 'portrait.webp', size: 100, type: 'image/webp' })
+  assert.deepEqual(JSON.parse(requests[0].options.body), { action: 'upload', kind: 'profile', id: 'main', name: 'portrait.webp', size: 100 })
+})
+
 test('legacy downloads still use Firebase rules and R2 downloads request fresh authorization', async () => {
   const legacy = await downloadAttachment({ path: 'portfolio/certificates/test/file/cert.pdf' })
   assert.equal(legacy.limit, MAX_FILE_BYTES)

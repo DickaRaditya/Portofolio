@@ -1,5 +1,8 @@
 export const MAX_FILE_BYTES = 10 * 1024 * 1024
 export const MAX_FILES = 5
+export const MAX_PHOTO_BYTES = 5 * 1024 * 1024
+export const PHOTO_ACCEPT = '.png,.jpg,.jpeg,.webp'
+const photoExtensions = new Set(PHOTO_ACCEPT.split(',').map(extension => extension.slice(1)))
 const types = {
   pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
   webp: 'image/webp', txt: 'text/plain', md: 'text/plain', csv: 'text/csv',
@@ -24,7 +27,19 @@ export function validateAttachments(files, existingCount = 0) {
     }
   }
 }
+export function validateProfilePhoto(file) {
+  if (!file || typeof file.name !== 'string' || !file.name.trim() || file.name.length > 255
+    || !file.name.includes('.') || !photoExtensions.has(file.name.split('.').pop().toLowerCase())) {
+    throw new Error('Use PNG, JPG, JPEG, or WebP for the profile photo.')
+  }
+  if (!Number.isSafeInteger(file.size) || file.size <= 0) throw new Error(`${file.name}: file size must be greater than zero.`)
+  if (file.size > MAX_PHOTO_BYTES) throw new Error(`${file.name} exceeds the 5 MB profile photo limit.`)
+  if (file.type !== undefined && file.type !== '' && file.type !== contentType(file.name)) {
+    throw new Error('Profile photo type must match its filename.')
+  }
+}
 export function validDestination(kind, id) {
+  if (kind === 'profile') return id === 'main'
   return ['projects', 'certificates'].includes(kind) && typeof id === 'string'
     && /^[A-Za-z0-9_-]{1,128}$/.test(id)
 }

@@ -1,6 +1,6 @@
 import { deleteObject, getBlob, ref } from 'firebase/storage'
 import { auth, isAdmin, storage, storageEnabled } from './firebase.js'
-import { MAX_FILE_BYTES, validateAttachments } from '../shared/file-policy.js'
+import { MAX_FILE_BYTES, validateAttachments, validateProfilePhoto } from '../shared/file-policy.js'
 export { MAX_FILE_BYTES, MAX_FILES, FILE_ACCEPT, validateAttachments } from '../shared/file-policy.js'
 
 export const fileSize = size => size < 1024 * 1024
@@ -35,7 +35,8 @@ function putFile(url, headers, file, onProgress) {
 export async function uploadAttachment(kind, id, file, onProgress = () => {}) {
   if (!isAdmin(auth?.currentUser)) throw new Error('Admin access required to upload files.')
   if (!storageEnabled) throw new Error('File uploads are not configured yet. You can still use a public link.')
-  validateAttachments([file])
+  if (kind === 'profile') validateProfilePhoto(file)
+  else validateAttachments([file])
   const { url, headers, attachment } = await fileRequest({ action: 'upload', kind, id, name: file.name, size: file.size })
   try {
     await putFile(url, headers, file, onProgress)

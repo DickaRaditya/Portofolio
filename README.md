@@ -25,17 +25,17 @@ This starts Vite and `/api/files` at `http://127.0.0.1:5173`. `npm run dev` is f
 
 Projects and certificates support up to five attachments, 10 MB each: PDF, DOC, DOCX, XLSX, PPTX, PNG, JPG, WebP, TXT, MD, CSV, ZIP. Certificates require either an attachment or an external link. Resume remains an external URL in the profile editor.
 
-In the dashboard, projects have an `Ongoing` or `Completed` status independent of publication. New projects default to `Ongoing` and may be published without a URL or attachment. Legacy projects without a recognized status display as `Completed`; editing and saving them persists the chosen status. The profile editor accepts an optional public direct image URL with a live preview. The photo appears beside “Get to know me” at 72 px (64 px on mobile); an empty or unavailable image falls back to the owner's initials.
+In the dashboard, projects have an `Ongoing` or `Completed` status independent of publication. New projects default to `Ongoing` and may be published without a URL or attachment. Legacy projects without a recognized status display as `Completed`; editing and saving them persists the chosen status. The profile editor supports uploading a JPG, PNG, or WebP photo up to 5 MB when R2 uploads are enabled, or entering a public direct image URL. Both options have a live preview; choose **Save profile** to apply the change. You can cancel a selection or remove the photo. The photo appears beside “Get to know me” at 72 px (64 px on mobile); an empty or unavailable image falls back to the owner's initials.
 
 ## Data and file access
 
 | Firestore path | Main fields |
 | --- | --- |
-| `profile/main` | `full_name`, `headline`, `bio`, `about`, `location`, `email`, `github`, `linkedin`, `resume_url`, `photo_url`, `published`, `updated_at` |
+| `profile/main` | `full_name`, `headline`, `bio`, `about`, `location`, `email`, `github`, `linkedin`, `resume_url`, `photo_url`, `photo` (uploaded file metadata), `published`, `updated_at` |
 | `projects/{id}` | `title`, `category`, `status` (`ongoing` or `completed`), `description`, `url`, `sort_order`, `published`, `attachments`, `attachment_paths`, `created_at`, `updated_at` |
 | `certificates/{id}` | `title`, `description`, `kind`, `issuer`, `public_url`, `published`, `attachments`, `attachment_paths`, `created_at`, `updated_at` |
 
-Each new attachment contains `provider: 'r2'`, `path`, `name`, `size`, and `type`. A missing provider (or `firebase`) denotes a legacy Firebase object. Both providers can coexist during migration. Paths follow `portfolio/{projects|certificates}/{recordId}/{uploadId}/{filename}`; no signed URLs are persisted.
+Each new attachment contains `provider: 'r2'`, `path`, `name`, `size`, and `type`. A missing provider (or `firebase`) denotes a legacy Firebase object. Both providers can coexist during migration. Paths follow `portfolio/{projects|certificates}/{recordId}/{uploadId}/{filename}`; profile photos use `portfolio/profile/main/{uploadId}/{filename}` and the singleton `photo` field. No signed URLs are persisted. Uploading a photo clears its external URL; switching to a URL or removing the photo revokes its metadata before deleting the old object. Failed profile saves clean up the new upload and retain the saved photo.
 
 The API verifies Firebase tokens, including revocation, and compares the UID against its own server setting. Only admin can request upload URLs or delete files. Downloads require a matching attachment on an existing published Firestore record, or the admin's authenticated request for an attached draft. R2 stays private. Download URLs expire after 60 seconds; previously issued URLs can work until expiry after unpublishing. Downloaded copies and external public URLs cannot be revoked.
 

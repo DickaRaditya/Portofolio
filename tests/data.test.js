@@ -26,7 +26,7 @@ mock.module('../src/files.js', { namedExports: {
   validateAttachments: (files, count) => { if (files.length + count > 5) throw new Error('Too many files') },
   uploadAttachment: async (name, id, file, progress) => {
     calls.push({ operation: 'upload', name, id })
-    if (uploadFailure && file.name === 'bad.pdf') throw new Error('Upload failed')
+    if (uploadFailure && ['bad.pdf', 'bad.jpg'].includes(file.name)) throw new Error('Upload failed')
     progress(100)
     return { name: file.name, path: `portfolio/${name}/${id}/${file.name}`, size: 100 }
   },
@@ -60,6 +60,7 @@ const { loadPortfolio, saveProfile, saveContent, deleteContent } = await import(
 beforeEach(() => {
   auth.currentUser = null; calls.length = 0
   uploadFailure = false; saveFailure = false; cleanupFailure = false
+  documents.profile = [{ id: 'main', full_name: 'Draft profile', published: false }]
   documents.projects[0].attachments = [{ name: 'old.pdf', path: 'old-path', size: 100 }]
 })
 
@@ -87,6 +88,8 @@ for (const user of [null, { uid: 'other-user' }]) {
     for (const action of [
       () => loadPortfolio(true),
       () => saveProfile({ published: true }),
+      () => saveProfile({ published: true }, { photoFile: { name: 'portrait.jpg', size: 100, type: 'image/jpeg' } }),
+      () => saveProfile({ published: true }, { removePhoto: true }),
       () => saveContent('projects', '', { published: true }),
       () => saveContent('certificates', 'existing', { published: false }),
       () => deleteContent('projects', 'existing'),
@@ -97,8 +100,127 @@ for (const user of [null, { uid: 'other-user' }]) {
 
 test('profile saves use the singleton and server timestamp', async () => {
   auth.currentUser = { uid: 'admin' }
-  await saveProfile({ full_name: 'Admin', published: false })
+  assert.deepEqual(await saveProfile({ full_name: 'Admin', published: false }), { cleanupFailed: [] })
   assert.deepEqual(calls[0], { operation: 'set', target: { name: 'profile', id: 'main' }, data: { full_name: 'Admin', published: false, updated_at: 'SERVER_TIMESTAMP' } })
+})
+
+const storedPhoto = () => Object.freeze({ provider: 'r2', name: 'old.jpg', path: 'portfolio/profile/main/old/old.jpg', size: 100, type: 'image/jpeg' })
+const newPhotoFile = name => ({ name, size: 100, type: 'image/jpeg' })
+
+test('unrelated profile edits preserve the stored photo and ignore client photo metadata', async () => {
+  auth.currentUser = { uid: 'admin' }
+  const oldPhoto = storedPhoto()
+  documents.profile[0].photo = oldPhoto
+  const data = Object.freeze({ full_name: 'Updated name', published: true, photo_url: '', photo: { path: 'forged-path' } })
+  const original = structuredClone(documents.profile[0])
+  const result = await saveProfile(data)
+  assert.deepEqual(calls.map(call => call.operation), ['set'])
+  assert.equal(calls[0].data.photo, oldPhoto)
+  assert.deepEqual(documents.profile[0], original)
+  assert.equal(data.photo.path, 'forged-path')
+  assert.deepEqual(result, { cleanupFailed: [] })
+})
+
+test('client photo metadata cannot create an uploaded profile photo', async () => {
+  auth.currentUser = { uid: 'admin' }
+  await saveProfile({ published: true, photo: storedPhoto() })
+  assert.equal(Object.hasOwn(calls[0].data, 'photo'), false)
+  assert.deepEqual(calls.map(call => call.operation), ['set'])
+})
+
+test('profile replacement uploads before saving metadata and cleans the old photo afterward', async () => {
+  auth.currentUser = { uid: 'admin' }
+  const oldPhoto = storedPhoto()
+  documents.profile[0].photo = oldPhoto
+  const data = Object.freeze({ full_name: 'Admin', photo_url: 'https://example.com/old.jpg', published: true })
+  const progress = []
+  const result = await saveProfile(data, { photoFile: newPhotoFile('portrait.jpg'), removePhoto: true, onProgress: text => progress.push(text) })
+  assert.deepEqual(calls.map(call => call.operation), ['upload', 'set', 'cleanup'])
+  assert.deepEqual(calls[0], { operation: 'upload', name: 'profile', id: 'main' })
+  assert.deepEqual(calls[1].target, { name: 'profile', id: 'main' })
+  assert.equal(calls[1].data.photo.path, 'portfolio/profile/main/portrait.jpg')
+  assert.equal(calls[1].data.photo_url, '')
+  assert.equal(calls[1].data.updated_at, 'SERVER_TIMESTAMP')
+  assert.deepEqual(calls[2].files, [oldPhoto])
+  assert.deepEqual(progress, ['Uploading profile photo: portrait.jpg (100%)'])
+  assert.equal(data.photo_url, 'https://example.com/old.jpg')
+  assert.equal(documents.profile[0].photo, oldPhoto)
+  assert.deepEqual(result, { cleanupFailed: [] })
+})
+
+test('a profile photo can be uploaded before the profile document exists', async () => {
+  auth.currentUser = { uid: 'admin' }
+  documents.profile = []
+  await saveProfile({ full_name: 'New profile', published: true }, { photoFile: newPhotoFile('portrait.jpg') })
+  assert.deepEqual(calls.map(call => call.operation), ['upload', 'set'])
+  assert.equal(calls[1].data.photo.path, 'portfolio/profile/main/portrait.jpg')
+  assert.equal(calls[1].data.photo_url, '')
+})
+
+test('failed profile metadata save cleans the new upload and preserves the old photo', async () => {
+  auth.currentUser = { uid: 'admin' }; saveFailure = true
+  const oldPhoto = storedPhoto()
+  documents.profile[0].photo = oldPhoto
+  await assert.rejects(() => saveProfile({ published: true }, { photoFile: newPhotoFile('portrait.jpg') }), /Save denied/)
+  assert.deepEqual(calls.map(call => call.operation), ['upload', 'cleanup'])
+  assert.equal(calls[1].files[0].path, 'portfolio/profile/main/portrait.jpg')
+  assert.equal(documents.profile[0].photo, oldPhoto)
+})
+
+test('failed profile upload leaves existing metadata and photo untouched', async () => {
+  auth.currentUser = { uid: 'admin' }; uploadFailure = true
+  const oldPhoto = storedPhoto()
+  documents.profile[0].photo = oldPhoto
+  await assert.rejects(() => saveProfile({ published: true }, { photoFile: newPhotoFile('bad.jpg') }), /Upload failed/)
+  assert.deepEqual(calls.map(call => call.operation), ['upload'])
+  assert.equal(documents.profile[0].photo, oldPhoto)
+})
+
+for (const options of [
+  { data: { photo_url: 'https://example.com/portrait.jpg' }, settings: {}, label: 'switching to a photo URL' },
+  { data: { photo_url: '' }, settings: { removePhoto: true }, label: 'removing the uploaded photo' },
+]) {
+  test(`${options.label} commits metadata before cleaning up the stored photo`, async () => {
+    auth.currentUser = { uid: 'admin' }
+    const oldPhoto = storedPhoto()
+    documents.profile[0].photo = oldPhoto
+    const result = await saveProfile({ published: true, ...options.data }, options.settings)
+    assert.deepEqual(calls.map(call => call.operation), ['set', 'cleanup'])
+    assert.equal(Object.hasOwn(calls[0].data, 'photo'), false)
+    assert.equal(calls[0].data.photo_url, options.data.photo_url)
+    assert.deepEqual(calls[1].files, [oldPhoto])
+    assert.deepEqual(result, { cleanupFailed: [] })
+  })
+}
+
+test('failed profile removal does not clean the still-referenced photo', async () => {
+  auth.currentUser = { uid: 'admin' }; saveFailure = true
+  const oldPhoto = storedPhoto()
+  documents.profile[0].photo = oldPhoto
+  await assert.rejects(() => saveProfile({ published: true }, { removePhoto: true }), /Save denied/)
+  assert.deepEqual(calls, [])
+  assert.equal(documents.profile[0].photo, oldPhoto)
+})
+
+test('profile saves report failure to clean the replaced photo', async () => {
+  auth.currentUser = { uid: 'admin' }; cleanupFailure = true
+  const oldPhoto = storedPhoto()
+  documents.profile[0].photo = oldPhoto
+  const result = await saveProfile({ published: true }, { photoFile: newPhotoFile('portrait.jpg') })
+  assert.deepEqual(calls.map(call => call.operation), ['upload', 'set', 'cleanup'])
+  assert.deepEqual(result, { cleanupFailed: [oldPhoto.path] })
+})
+
+test('failed profile save reports unattached upload cleanup failure', async () => {
+  auth.currentUser = { uid: 'admin' }; saveFailure = true; cleanupFailure = true
+  await assert.rejects(() => saveProfile({ published: true }, { photoFile: newPhotoFile('portrait.jpg') }), /Some unattached uploads need cleanup/)
+  assert.deepEqual(calls.map(call => call.operation), ['upload', 'cleanup'])
+})
+
+test('profile uploads reject non-image files before uploading or changing metadata', async () => {
+  auth.currentUser = { uid: 'admin' }
+  await assert.rejects(() => saveProfile({ published: true }, { photoFile: { name: 'document.pdf', size: 100, type: 'application/pdf' } }))
+  assert.deepEqual(calls, [])
 })
 
 for (const name of ['projects', 'certificates']) {

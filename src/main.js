@@ -7,6 +7,7 @@ import { previewSource } from './preview-source.js'
 import { terminalMarkup, bindTerminal } from './terminal.js'
 import { bindPageMotion } from './motion.js'
 import { PROJECT_STATUSES, normalizeProjectStatus, projectStatusLabel, validateProjectStatus } from './project-status.js'
+import { PHOTO_ACCEPT, validateProfilePhoto } from '../shared/file-policy.js'
 import documentCover from './assets/document-cover.svg'
 import folderCover from './assets/folder-cover.svg'
 import './style.css'
@@ -23,6 +24,7 @@ let previewObserver
 let clearTerminal = () => {}
 let clearPageMotion = () => {}
 const previewObjectUrls = new Set()
+const profilePhotoRequests = new Map()
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 function safeUrl(value) {
@@ -34,18 +36,52 @@ function safeUrl(value) {
 function validateUrl(value, label) {
   if (value && !safeUrl(value)) throw new Error(`${label} must use an http:// or https:// URL.`)
 }
-function profilePhoto(profile, preview = false) {
+function profilePhoto(profile, preview = false, localPreview = '') {
   const name = profile.full_name?.trim() || 'Dicka Raditya'
   const initials = name.split(/\s+/).slice(0, 2).map(part => Array.from(part)[0]).join('').toUpperCase()
-  const url = safeUrl(profile.photo_url)
-  return `<div class="profilePhoto${preview ? ' profilePhotoPreview' : ''}" role="img" aria-label="${esc(`Profile photo of ${name}`)}"><span class="profileInitials" aria-hidden="true">${esc(initials)}</span>${url ? `<img src="${esc(url)}" alt="" width="72" height="72" decoding="async" referrerpolicy="no-referrer">` : ''}</div>`
+  const storedPhoto = !localPreview && profile.photo
+  const url = localPreview || (!storedPhoto && safeUrl(profile.photo_url))
+  return `<div class="profilePhoto${preview ? ' profilePhotoPreview' : ''}" role="img" aria-label="${esc(`Profile photo of ${name}`)}"${storedPhoto ? ' data-stored-profile-photo' : ''}><span class="profileInitials" aria-hidden="true">${esc(initials)}</span>${url || storedPhoto ? `<img ${url ? `src="${esc(url)}"` : 'hidden'} alt="" width="72" height="72" decoding="async" referrerpolicy="no-referrer">` : ''}</div>`
 }
 function bindProfilePhotos(root = app) {
+  const version = routeVersion
   root.querySelectorAll('.profilePhoto img').forEach(img => {
     const showFallback = () => { img.hidden = true }
     img.addEventListener('error', showFallback, { once: true })
     if (img.complete && !img.naturalWidth) showFallback()
+    if (img.parentElement.hasAttribute('data-stored-profile-photo')) {
+      const file = state.profile.photo
+      if (!profilePhotoRequests.has(file.path)) {
+        profilePhotoRequests.set(file.path, downloadAttachment(file).then(blob => {
+          if (version !== routeVersion) return ''
+          const url = URL.createObjectURL(blob)
+          previewObjectUrls.add(url)
+          return url
+        }).catch(() => ''))
+      }
+      void profilePhotoRequests.get(file.path).then(url => {
+        if (!url || version !== routeVersion || !img.isConnected) return
+        img.src = url
+        img.hidden = false
+      })
+    }
   })
+}
+async function photoPreviewUrl(file) {
+  validateProfilePhoto(file)
+  const url = URL.createObjectURL(file)
+  try {
+    await new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = resolve
+      img.onerror = () => reject(new Error('This file is not a readable JPG, PNG, or WebP image.'))
+      img.src = url
+    })
+    return url
+  } catch (error) {
+    URL.revokeObjectURL(url)
+    throw error
+  }
 }
 function projectStatusBadge(value) {
   return `<span class="projectStatus ${normalizeProjectStatus(value)}">${projectStatusLabel(value)}</span>`
@@ -71,6 +107,7 @@ function cardPreview(item, collection) {
 }
 function clearFilePreviews() {
   previewObserver?.disconnect()
+  profilePhotoRequests.clear()
   for (const url of previewObjectUrls) URL.revokeObjectURL(url)
   previewObjectUrls.clear()
 }
@@ -194,10 +231,10 @@ function dashboard() {
   ${notice()}<p id="dashboardMsg" class="meta" role="status" aria-live="polite"></p>
   <section><div class="sectionHead"><span>PROFILE</span><h2>Public identity</h2></div><form id="profileForm" class="formGrid card">
   ${[['full_name', 'Nama lengkap'], ['headline', 'Headline'], ['location', 'Lokasi'], ['email', 'Email'], ['github', 'GitHub URL'], ['linkedin', 'LinkedIn URL']].map(([key, label]) => `<label>${label}<input name="${key}" type="${key === 'email' ? 'email' : ['github', 'linkedin'].includes(key) ? 'url' : 'text'}" value="${esc(state.profile?.[key] || '')}"></label>`).join('')}
-  <fieldset class="wide profilePhotoSettings"><legend>Profile photo</legend><div id="profilePhotoPreview">${profilePhoto(state.profile || {}, true)}</div><label>Photo URL (optional)<input name="photo_url" type="url" placeholder="https://example.com/photo.jpg" aria-describedby="photoHint" value="${esc(state.profile?.photo_url || '')}"></label><p id="photoHint" class="meta photoHint">Use a public direct image link (JPG, PNG, or WebP). A small photo appears beside “Get to know me”. Clear the URL to use your initials.</p></fieldset>
+  <fieldset class="wide profilePhotoSettings"><legend>Profile photo</legend><div id="profilePhotoPreview">${profilePhoto(state.profile || {}, true)}</div><div class="profilePhotoControls">${storageEnabled ? `<label>Upload photo<input name="photo_file" type="file" accept="${PHOTO_ACCEPT}" aria-describedby="photoHint"></label><p class="photoSelection meta" role="status" aria-live="polite"></p>` : '<p class="meta">Photo uploads are not configured yet. You can use a public image URL.</p>'}<div class="actions photoActions"><button id="clearPhotoSelection" type="button" class="btn small" hidden>Cancel selected photo</button><button id="removeProfilePhoto" type="button" class="btn small danger" ${state.profile?.photo || state.profile?.photo_url ? '' : 'hidden'}>Remove photo</button></div></div><label class="photoUrlField">Photo URL (optional)<input name="photo_url" type="url" placeholder="https://example.com/photo.jpg" aria-describedby="photoHint" value="${esc(state.profile?.photo_url || '')}"></label><p id="photoHint" class="meta photoHint">Upload a JPG, PNG, or WebP photo up to 5 MB, or use a public direct image URL. Choose Save profile to apply your changes. A small photo appears beside “Get to know me”.</p><p class="formStatus meta" role="status" aria-live="polite"></p></fieldset>
   <label class="wide">Bio<textarea name="bio">${esc(state.profile?.bio || '')}</textarea></label><label class="wide">About<textarea name="about">${esc(state.profile?.about || '')}</textarea></label>
   <label class="wide">Resume URL (optional)<input name="resume_url" type="url" placeholder="https://..." aria-describedby="resumeHint" value="${esc(state.profile?.resume_url || '')}"></label><p id="resumeHint" class="wide meta">Paste a public link to your resume, such as a Google Drive PDF with “Anyone with the link” access. Clear this field to remove the resume link.</p>
-  <label class="check"><input name="published" type="checkbox" ${state.profile?.published !== false ? 'checked' : ''}> Published</label><button class="btn primary">Save profile</button></form></section>
+  <label class="check"><input name="published" type="checkbox" ${state.profile?.published !== false ? 'checked' : ''}> Published</label><button type="submit" class="btn primary">Save profile</button></form></section>
   <section><div class="sectionHead"><span>PROJECTS</span><h2>Manage projects</h2></div><form id="projectForm" class="card formGrid"><input type="hidden" name="id"><label>Title<input name="title" required></label><label>Category<input name="category"></label><label>Status<select name="status" required aria-describedby="projectStatusHint">${PROJECT_STATUSES.map(status => `<option value="${status.value}">${status.label}</option>`).join('')}</select></label><p id="projectStatusHint" class="meta">Ongoing projects can be published before they are finished, with or without a link or attachment.</p><label class="wide">Description<textarea name="description"></textarea></label><label>Project URL (optional)<input name="url" type="url"></label><label>Sort order<input name="sort_order" type="number" step="1" value="0" required></label>${uploadFields()}<label class="check"><input name="published" type="checkbox" checked> Published</label><div class="actions"><button class="btn primary">Save project</button><button class="btn" type="reset">Cancel / New</button></div></form>
   <div class="cards">${state.projects.map(item => adminItem(item, 'projects')).join('')}</div></section>
   <section><div class="sectionHead"><span>CERTIFICATES</span><h2>Manage certificates</h2></div><form id="certificateForm" class="card formGrid"><input type="hidden" name="id"><label>Title<input name="title" required></label><label>Issuer<input name="issuer"></label><label class="wide">Description<textarea name="description"></textarea></label><label>Type<select name="kind"><option>Certificate</option><option>Report</option><option>Project File</option><option>Other</option></select></label><label>Verification URL (optional)<input name="public_url" type="url" placeholder="https://..."></label>${uploadFields()}<label class="check"><input name="published" type="checkbox" checked> Published</label><div class="actions"><button class="btn primary">Save certificate</button><button class="btn" type="reset">Cancel / New</button></div></form>
@@ -302,7 +339,7 @@ async function mutate(button, action, success) {
     const nextMessage = document.querySelector('#dashboardMsg')
     if (nextMessage) {
       nextMessage.textContent = result?.cleanupFailed?.length
-        ? `${success} Some old files could not be deleted from Storage. They are no longer public; remove them in Firebase Storage.` : success
+        ? `${success} Some old files could not be deleted from file storage and need manual cleanup.` : success
     }
   } catch (error) {
     if (version !== routeVersion) return
@@ -313,13 +350,87 @@ async function mutate(button, action, success) {
 
 function bindDashboard() {
   const profileForm = document.querySelector('#profileForm')
+  let selectedPhotoUrl = ''
+  let removePhoto = false
+  let photoIsLoading = false
+  let photoSelectionVersion = 0
+  let photoUrlBeforeSelection = profileForm?.elements.photo_url.value || ''
+  let removePhotoBeforeSelection = false
+  const releaseSelectedPhoto = () => {
+    ++photoSelectionVersion
+    photoIsLoading = false
+    if (selectedPhotoUrl) { URL.revokeObjectURL(selectedPhotoUrl); previewObjectUrls.delete(selectedPhotoUrl) }
+    selectedPhotoUrl = ''
+    if (profileForm.elements.photo_file) profileForm.elements.photo_file.value = ''
+    document.querySelector('#clearPhotoSelection').hidden = true
+  }
   const updatePhotoPreview = () => {
     const preview = document.querySelector('#profilePhotoPreview')
     if (!preview) return
-    preview.innerHTML = profilePhoto({ full_name: profileForm.elements.full_name.value, photo_url: profileForm.elements.photo_url.value.trim() }, true)
+    const photoUrl = profileForm.elements.photo_url.value.trim()
+    const photo = !removePhoto && !photoUrl ? state.profile?.photo : null
+    preview.innerHTML = profilePhoto({ full_name: profileForm.elements.full_name.value, photo_url: photoUrl, photo }, true, selectedPhotoUrl)
     bindProfilePhotos(preview)
+    document.querySelector('#removeProfilePhoto').hidden = !selectedPhotoUrl && !photo && !photoUrl
   }
-  profileForm?.elements.photo_url.addEventListener('input', updatePhotoPreview)
+  profileForm?.elements.photo_file?.addEventListener('change', async event => {
+    const file = event.currentTarget.files[0]
+    const message = profileForm.querySelector('.photoSelection')
+    const version = ++photoSelectionVersion
+    const route = routeVersion
+    if (!file) { releaseSelectedPhoto(); updatePhotoPreview(); message.textContent = ''; return }
+    photoIsLoading = true
+    message.className = 'photoSelection meta'
+    message.textContent = 'Preparing photo preview…'
+    try {
+      const url = await photoPreviewUrl(file)
+      if (version !== photoSelectionVersion || route !== routeVersion) { URL.revokeObjectURL(url); return }
+      if (selectedPhotoUrl) { URL.revokeObjectURL(selectedPhotoUrl); previewObjectUrls.delete(selectedPhotoUrl) }
+      else {
+        photoUrlBeforeSelection = profileForm.elements.photo_url.value
+        removePhotoBeforeSelection = removePhoto
+      }
+      selectedPhotoUrl = url
+      previewObjectUrls.add(url)
+      profileForm.elements.photo_url.value = ''
+      removePhoto = false
+      document.querySelector('#clearPhotoSelection').hidden = false
+      message.textContent = `${file.name} (${fileSize(file.size)}) — ready to save.`
+      updatePhotoPreview()
+    } catch (error) {
+      if (version !== photoSelectionVersion || route !== routeVersion) return
+      if (selectedPhotoUrl) {
+        profileForm.elements.photo_url.value = photoUrlBeforeSelection
+        removePhoto = removePhotoBeforeSelection
+      }
+      releaseSelectedPhoto()
+      message.className = 'photoSelection error'
+      message.textContent = error.message
+      updatePhotoPreview()
+    } finally { if (version === photoSelectionVersion) photoIsLoading = false }
+  })
+  document.querySelector('#clearPhotoSelection')?.addEventListener('click', () => {
+    releaseSelectedPhoto()
+    profileForm.elements.photo_url.value = photoUrlBeforeSelection
+    removePhoto = removePhotoBeforeSelection
+    profileForm.querySelector('.photoSelection').textContent = ''
+    updatePhotoPreview()
+  })
+  document.querySelector('#removeProfilePhoto')?.addEventListener('click', () => {
+    releaseSelectedPhoto()
+    removePhoto = true
+    profileForm.elements.photo_url.value = ''
+    const message = profileForm.querySelector('.photoSelection') || profileForm.querySelector('.formStatus')
+    message.className = message.classList.contains('photoSelection') ? 'photoSelection meta' : 'formStatus meta'
+    message.textContent = 'Photo will be removed when you save your profile.'
+    updatePhotoPreview()
+  })
+  profileForm?.elements.photo_url.addEventListener('input', () => {
+    releaseSelectedPhoto()
+    const message = profileForm.querySelector('.photoSelection')
+    if (message) message.textContent = ''
+    updatePhotoPreview()
+  })
   profileForm?.elements.full_name.addEventListener('input', updatePhotoPreview)
   document.querySelector('#logout')?.addEventListener('click', async event => {
     const button = event.currentTarget
@@ -333,16 +444,18 @@ function bindDashboard() {
   document.querySelector('#profileForm')?.addEventListener('submit', event => {
     event.preventDefault()
     const form = event.currentTarget
-    const data = Object.fromEntries(new FormData(form))
+    const { photo_file: ignoredPhotoFile, ...data } = Object.fromEntries(new FormData(form))
+    const photoFile = form.elements.photo_file?.files[0] || null
     data.published = form.elements.published.checked
-    void mutate(form.querySelector('button'), async () => {
+    void mutate(form.querySelector('button[type="submit"]'), async onProgress => {
+      if (photoIsLoading) throw new Error('Wait for the photo preview to finish, then save again.')
       validateUrl(data.github, 'GitHub URL')
       validateUrl(data.linkedin, 'LinkedIn URL')
       data.resume_url = data.resume_url.trim()
       validateUrl(data.resume_url, 'Resume URL')
       data.photo_url = data.photo_url.trim()
       validateUrl(data.photo_url, 'Photo URL')
-      await saveProfile(data)
+      return saveProfile(data, { photoFile, removePhoto, onProgress })
     }, 'Profile saved.')
   })
   for (const [formId, collection] of [['projectForm', 'projects'], ['certificateForm', 'certificates']]) {

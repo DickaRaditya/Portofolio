@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { contentType, MAX_FILE_BYTES, parseAttachmentPath, safeFilename, validDestination, validateAttachments } from '../shared/file-policy.js'
+import { contentType, MAX_FILE_BYTES, MAX_PHOTO_BYTES, parseAttachmentPath, safeFilename, validDestination, validateAttachments, validateProfilePhoto } from '../shared/file-policy.js'
 
 const fail = (status, message) => Object.assign(new Error(message), { status })
 
@@ -31,7 +31,11 @@ export function createFilesHandler(getServices, sign = getSignedUrl) {
 
       if (body.action === 'upload') {
         if (!validDestination(body.kind, body.id)) throw fail(400, 'Invalid upload destination.')
-        try { validateAttachments([{ name: body.name, size: body.size }]) } catch (error) { throw fail(400, error.message) }
+        try {
+          const file = { name: body.name, size: body.size, type: body.type }
+          if (body.kind === 'profile') validateProfilePhoto(file)
+          else validateAttachments([file])
+        } catch (error) { throw fail(400, error.message) }
         const name = safeFilename(body.name)
         const path = `portfolio/${body.kind}/${body.id}/${randomUUID()}/${name}`
         const type = contentType(body.name)
@@ -56,12 +60,18 @@ export function createFilesHandler(getServices, sign = getSignedUrl) {
       // Do not trust a caller's published flag or its attachment metadata.
       const snapshot = await db.collection(location.kind).doc(location.id).get()
       const record = snapshot.data()
-      const attachment = record?.attachments?.find(file => file.path === body.path && file.provider === 'r2')
-      if (!snapshot.exists || !attachment || !record.attachment_paths?.includes(body.path)
+      const profilePhoto = location.kind === 'profile'
+      const attachment = profilePhoto ? record?.photo : record?.attachments?.find(file => file.path === body.path && file.provider === 'r2')
+      if (!snapshot.exists || !attachment || attachment.path !== body.path || attachment.provider !== 'r2'
+        || (!profilePhoto && !record.attachment_paths?.includes(body.path))
         || (!admin && record.published !== true)) throw fail(404, 'File not found or not published.')
+      if (profilePhoto) {
+        try { validateProfilePhoto(attachment) } catch { throw fail(409, 'File metadata does not match. Please upload the file again.') }
+        if (contentType(body.path.split('/').pop()) !== attachment.type) throw fail(409, 'File metadata does not match. Please upload the file again.')
+      }
       const object = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: body.path }))
       if (!Number.isSafeInteger(object.ContentLength) || object.ContentLength <= 0
-        || object.ContentLength > MAX_FILE_BYTES || object.ContentLength !== attachment.size
+        || object.ContentLength > (profilePhoto ? MAX_PHOTO_BYTES : MAX_FILE_BYTES) || object.ContentLength !== attachment.size
         || object.ContentType !== attachment.type) throw fail(409, 'File metadata does not match. Please upload the file again.')
       const url = await sign(s3, new GetObjectCommand({
         Bucket: bucket, Key: body.path,
