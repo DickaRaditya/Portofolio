@@ -6,6 +6,7 @@ import { experienceSection, skillsSection, bindJourney } from './journey.js'
 import { previewSource } from './preview-source.js'
 import { terminalMarkup, bindTerminal } from './terminal.js'
 import { bindPageMotion } from './motion.js'
+import { PROJECT_STATUSES, normalizeProjectStatus, projectStatusLabel, validateProjectStatus } from './project-status.js'
 import documentCover from './assets/document-cover.svg'
 import folderCover from './assets/folder-cover.svg'
 import './style.css'
@@ -32,6 +33,22 @@ function safeUrl(value) {
 }
 function validateUrl(value, label) {
   if (value && !safeUrl(value)) throw new Error(`${label} must use an http:// or https:// URL.`)
+}
+function profilePhoto(profile, preview = false) {
+  const name = profile.full_name?.trim() || 'Dicka Raditya'
+  const initials = name.split(/\s+/).slice(0, 2).map(part => Array.from(part)[0]).join('').toUpperCase()
+  const url = safeUrl(profile.photo_url)
+  return `<div class="profilePhoto${preview ? ' profilePhotoPreview' : ''}" role="img" aria-label="${esc(`Profile photo of ${name}`)}"><span class="profileInitials" aria-hidden="true">${esc(initials)}</span>${url ? `<img src="${esc(url)}" alt="" width="72" height="72" decoding="async" referrerpolicy="no-referrer">` : ''}</div>`
+}
+function bindProfilePhotos(root = app) {
+  root.querySelectorAll('.profilePhoto img').forEach(img => {
+    const showFallback = () => { img.hidden = true }
+    img.addEventListener('error', showFallback, { once: true })
+    if (img.complete && !img.naturalWidth) showFallback()
+  })
+}
+function projectStatusBadge(value) {
+  return `<span class="projectStatus ${normalizeProjectStatus(value)}">${projectStatusLabel(value)}</span>`
 }
 function resumeSection(profile) {
   const url = safeUrl(profile.resume_url)
@@ -150,11 +167,11 @@ function publicPage(){
  <p>${esc(p.bio||'Cybersecurity professional focused on defensive security, SOC operations, threat detection and secure infrastructure.')}</p>
  <div class="actions"><a class="btn primary" href="#projects">Explore my work <span aria-hidden="true">↗</span></a><a class="btn" href="#resume">Read my resume <span aria-hidden="true">↓</span></a></div>
  <div class="heroSpecialties" aria-label="Areas of focus"><span>SOC operations</span><span>Digital forensics</span><span>Blue team</span></div>
- </div><div class="heroConsole"><div class="consoleCaption"><span>GET TO KNOW ME</span><span aria-hidden="true">~/profile.sh</span></div>${terminalMarkup(p.full_name||'Your Name')}</div></div>
+ </div><div class="heroConsole"><div class="consoleCaption"><div class="consoleIdentity">${profilePhoto(p)}<span>GET TO KNOW ME</span></div><span aria-hidden="true">~/profile.sh</span></div>${terminalMarkup(p.full_name||'Your Name')}</div></div>
  <div class="wrap heroOverview"><div><span class="overviewLabel">BASED IN</span><strong>${esc(p.location||'Indonesia')}</strong></div><a href="#projects"><span class="overviewLabel">SELECTED WORK</span><strong>${String(state.projects.length).padStart(2, '0')} <span>projects</span><span aria-hidden="true">↗</span></strong></a><a href="#certificates"><span class="overviewLabel">CONTINUOUS LEARNING</span><strong>${String(state.certificates.length).padStart(2, '0')} <span>credentials</span><span aria-hidden="true">↗</span></strong></a></div></header>
  <main><section id="about"><div class="wrap"><div class="sectionHead"><span>01 — ABOUT</span><h2>About me</h2></div><div class="card"><p>${esc(p.about||p.bio||'Tambahkan perkenalan melalui dashboard admin.')}</p><div class="meta">${esc(p.location||'Indonesia')} · ${esc(p.email||'email@example.com')}</div></div></div></section>
  ${resumeSection(p)}${experienceSection()}${skillsSection()}
- <section id="projects"><div class="wrap"><div class="sectionHead"><span>05 — PROJECTS</span><h2>Security Projects</h2><p class="meta">Research, practical labs, and the work behind the learning.</p></div><div class="cards">${state.projects.map(x=>`<article class="card projectCard"><div class="tag">${esc(x.category||'Cybersecurity')}</div><h3>${esc(x.title)}</h3>${cardPreview(x, 'projects')}${projectDescription(x.description)}${attachmentLinks(x, 'projects')}${x.url?`<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.url))}">Open project link</a>`:''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada project publik.</p></div>'}</div></div></section>
+ <section id="projects"><div class="wrap"><div class="sectionHead"><span>05 — PROJECTS</span><h2>Security Projects</h2><p class="meta">Research, practical labs, and the work behind the learning.</p></div><div class="cards">${state.projects.map(x=>`<article class="card projectCard"><div class="projectMeta"><div class="tag">${esc(x.category||'Cybersecurity')}</div>${projectStatusBadge(x.status)}</div><h3>${esc(x.title)}</h3>${cardPreview(x, 'projects')}${projectDescription(x.description)}${attachmentLinks(x, 'projects')}${x.url?`<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.url))}">Open project link</a>`:''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada project publik.</p></div>'}</div></div></section>
  <section id="certificates"><div class="wrap"><div class="sectionHead"><span>06 — CERTIFICATES & FILES</span><h2>Credentials</h2></div><div class="cards">${state.certificates.map(x=>`<article class="card fileCard"><div class="fileCardContent"><div class="tag">${esc(x.kind||'Document')}</div><h3>${esc(x.title)}</h3>${x.description ? `<p>${esc(x.description)}</p>` : ''}<small>${esc(x.issuer || "")}</small>${cardPreview(x, 'certificates')}${attachmentLinks(x, 'certificates')}</div>${x.public_url ? `<a class="btn small" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(x.public_url))}">Open link</a>` : ''}</article>`).join('') || '<div class="card"><p class="meta">Belum ada sertifikat/file publik.</p></div>'}</div></div></section>
  <section id="contact"><div class="wrap"><div class="sectionHead"><span>07 — CONTACT</span><h2>Let's connect</h2></div><div class="card"><p class="meta">Untuk kolaborasi, diskusi security, atau peluang profesional.</p><div class="actions"><a class="btn primary" target="_blank" rel="noopener noreferrer" href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=${esc(encodeURIComponent(p.email||'email@example.com'))}">Email via Gmail</a>${p.github?`<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(p.github))}">GitHub</a>`:''}${p.linkedin?`<a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(safeUrl(p.linkedin))}">LinkedIn</a>`:''}</div></div></div></section></main>`)
 }
@@ -177,17 +194,18 @@ function dashboard() {
   ${notice()}<p id="dashboardMsg" class="meta" role="status" aria-live="polite"></p>
   <section><div class="sectionHead"><span>PROFILE</span><h2>Public identity</h2></div><form id="profileForm" class="formGrid card">
   ${[['full_name', 'Nama lengkap'], ['headline', 'Headline'], ['location', 'Lokasi'], ['email', 'Email'], ['github', 'GitHub URL'], ['linkedin', 'LinkedIn URL']].map(([key, label]) => `<label>${label}<input name="${key}" type="${key === 'email' ? 'email' : ['github', 'linkedin'].includes(key) ? 'url' : 'text'}" value="${esc(state.profile?.[key] || '')}"></label>`).join('')}
+  <fieldset class="wide profilePhotoSettings"><legend>Profile photo</legend><div id="profilePhotoPreview">${profilePhoto(state.profile || {}, true)}</div><label>Photo URL (optional)<input name="photo_url" type="url" placeholder="https://example.com/photo.jpg" aria-describedby="photoHint" value="${esc(state.profile?.photo_url || '')}"></label><p id="photoHint" class="meta photoHint">Use a public direct image link (JPG, PNG, or WebP). A small photo appears beside “Get to know me”. Clear the URL to use your initials.</p></fieldset>
   <label class="wide">Bio<textarea name="bio">${esc(state.profile?.bio || '')}</textarea></label><label class="wide">About<textarea name="about">${esc(state.profile?.about || '')}</textarea></label>
   <label class="wide">Resume URL (optional)<input name="resume_url" type="url" placeholder="https://..." aria-describedby="resumeHint" value="${esc(state.profile?.resume_url || '')}"></label><p id="resumeHint" class="wide meta">Paste a public link to your resume, such as a Google Drive PDF with “Anyone with the link” access. Clear this field to remove the resume link.</p>
   <label class="check"><input name="published" type="checkbox" ${state.profile?.published !== false ? 'checked' : ''}> Published</label><button class="btn primary">Save profile</button></form></section>
-  <section><div class="sectionHead"><span>PROJECTS</span><h2>Manage projects</h2></div><form id="projectForm" class="card formGrid"><input type="hidden" name="id"><label>Title<input name="title" required></label><label>Category<input name="category"></label><label class="wide">Description<textarea name="description"></textarea></label><label>Project URL (optional)<input name="url" type="url"></label><label>Sort order<input name="sort_order" type="number" step="1" value="0" required></label>${uploadFields()}<label class="check"><input name="published" type="checkbox" checked> Published</label><div class="actions"><button class="btn primary">Save project</button><button class="btn" type="reset">Cancel / New</button></div></form>
+  <section><div class="sectionHead"><span>PROJECTS</span><h2>Manage projects</h2></div><form id="projectForm" class="card formGrid"><input type="hidden" name="id"><label>Title<input name="title" required></label><label>Category<input name="category"></label><label>Status<select name="status" required aria-describedby="projectStatusHint">${PROJECT_STATUSES.map(status => `<option value="${status.value}">${status.label}</option>`).join('')}</select></label><p id="projectStatusHint" class="meta">Ongoing projects can be published before they are finished, with or without a link or attachment.</p><label class="wide">Description<textarea name="description"></textarea></label><label>Project URL (optional)<input name="url" type="url"></label><label>Sort order<input name="sort_order" type="number" step="1" value="0" required></label>${uploadFields()}<label class="check"><input name="published" type="checkbox" checked> Published</label><div class="actions"><button class="btn primary">Save project</button><button class="btn" type="reset">Cancel / New</button></div></form>
   <div class="cards">${state.projects.map(item => adminItem(item, 'projects')).join('')}</div></section>
   <section><div class="sectionHead"><span>CERTIFICATES</span><h2>Manage certificates</h2></div><form id="certificateForm" class="card formGrid"><input type="hidden" name="id"><label>Title<input name="title" required></label><label>Issuer<input name="issuer"></label><label class="wide">Description<textarea name="description"></textarea></label><label>Type<select name="kind"><option>Certificate</option><option>Report</option><option>Project File</option><option>Other</option></select></label><label>Verification URL (optional)<input name="public_url" type="url" placeholder="https://..."></label>${uploadFields()}<label class="check"><input name="published" type="checkbox" checked> Published</label><div class="actions"><button class="btn primary">Save certificate</button><button class="btn" type="reset">Cancel / New</button></div></form>
   <div class="cards">${state.certificates.map(item => adminItem(item, 'certificates')).join('')}</div></section>
   </div></main>`)
 }
 function adminItem(item, collection) {
-  return `<article class="card adminItem"><div><b>${esc(item.title)}</b><p class="meta">${esc(item.category || item.kind || '')} · ${item.published ? 'Published' : 'Draft'}</p>${attachmentLinks(item, collection)}</div><button class="btn small editItem" data-collection="${collection}" data-id="${esc(item.id)}">Edit</button><button class="btn small danger deleteItem" data-collection="${collection}" data-id="${esc(item.id)}">Delete</button></article>`
+  return `<article class="card adminItem"><div><b>${esc(item.title)}</b><p class="meta">${esc(item.category || item.kind || '')} · ${item.published ? 'Published' : 'Draft'}</p>${collection === 'projects' ? projectStatusBadge(item.status) : ''}${attachmentLinks(item, collection)}</div><button class="btn small editItem" data-collection="${collection}" data-id="${esc(item.id)}">Edit</button><button class="btn small danger deleteItem" data-collection="${collection}" data-id="${esc(item.id)}">Delete</button></article>`
 }
 
 async function route() {
@@ -227,6 +245,7 @@ async function route() {
     ? shell(`<main class="dashboard"><div class="wrap">${notice()}<button id="logout" class="btn">Sign out</button></div></main>`)
     : admin ? dashboard() : publicPage()
   document.querySelector('#retry')?.addEventListener('click', route)
+  bindProfilePhotos()
   if (!admin) {
     bindFilePreviews()
     bindJourney(app)
@@ -293,6 +312,15 @@ async function mutate(button, action, success) {
 }
 
 function bindDashboard() {
+  const profileForm = document.querySelector('#profileForm')
+  const updatePhotoPreview = () => {
+    const preview = document.querySelector('#profilePhotoPreview')
+    if (!preview) return
+    preview.innerHTML = profilePhoto({ full_name: profileForm.elements.full_name.value, photo_url: profileForm.elements.photo_url.value.trim() }, true)
+    bindProfilePhotos(preview)
+  }
+  profileForm?.elements.photo_url.addEventListener('input', updatePhotoPreview)
+  profileForm?.elements.full_name.addEventListener('input', updatePhotoPreview)
   document.querySelector('#logout')?.addEventListener('click', async event => {
     const button = event.currentTarget
     button.disabled = true
@@ -312,6 +340,8 @@ function bindDashboard() {
       validateUrl(data.linkedin, 'LinkedIn URL')
       data.resume_url = data.resume_url.trim()
       validateUrl(data.resume_url, 'Resume URL')
+      data.photo_url = data.photo_url.trim()
+      validateUrl(data.photo_url, 'Photo URL')
       await saveProfile(data)
     }, 'Profile saved.')
   })
@@ -321,7 +351,8 @@ function bindDashboard() {
     document.getElementById(formId)?.addEventListener('reset', event => {
       event.currentTarget.elements.id.value = ''
       event.currentTarget.querySelector('.existingFiles').innerHTML = ''
-      event.currentTarget.querySelector('.fileSelection').textContent = ''
+      const selection = event.currentTarget.querySelector('.fileSelection')
+      if (selection) selection.textContent = ''
       event.currentTarget.querySelector('.formStatus').textContent = ''
     })
     document.getElementById(formId)?.elements.files?.addEventListener('change', event => {
@@ -345,6 +376,7 @@ function bindDashboard() {
         data.title = data.title.trim()
         if (!data.title) throw new Error('Title is required.')
         if (collection === 'projects') {
+          data.status = validateProjectStatus(data.status)
           validateUrl(data.url, 'Project URL')
           data.sort_order = Number(data.sort_order)
           if (!Number.isSafeInteger(data.sort_order)) throw new Error('Sort order must be a whole number.')
@@ -365,6 +397,7 @@ function bindDashboard() {
     for (const input of form.elements) {
       if (!input.name || input.type === 'file' || input.name === 'remove_file') continue
       if (input.type === 'checkbox') input.checked = item[input.name] === true
+      else if (collection === 'projects' && input.name === 'status') input.value = normalizeProjectStatus(item.status)
       else input.value = item[input.name] ?? (input.name === 'sort_order' ? 0 : '')
     }
     editAttachments(form, item)

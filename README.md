@@ -25,12 +25,14 @@ This starts Vite and `/api/files` at `http://127.0.0.1:5173`. `npm run dev` is f
 
 Projects and certificates support up to five attachments, 10 MB each: PDF, DOC, DOCX, XLSX, PPTX, PNG, JPG, WebP, TXT, MD, CSV, ZIP. Certificates require either an attachment or an external link. Resume remains an external URL in the profile editor.
 
+In the dashboard, projects have an `Ongoing` or `Completed` status independent of publication. New projects default to `Ongoing` and may be published without a URL or attachment. Legacy projects without a recognized status display as `Completed`; editing and saving them persists the chosen status. The profile editor accepts an optional public direct image URL with a live preview. The photo appears beside “Get to know me” at 72 px (64 px on mobile); an empty or unavailable image falls back to the owner's initials.
+
 ## Data and file access
 
 | Firestore path | Main fields |
 | --- | --- |
-| `profile/main` | `full_name`, `headline`, `bio`, `about`, `location`, `email`, `github`, `linkedin`, `resume_url`, `published`, `updated_at` |
-| `projects/{id}` | `title`, `category`, `description`, `url`, `sort_order`, `published`, `attachments`, `attachment_paths`, `created_at`, `updated_at` |
+| `profile/main` | `full_name`, `headline`, `bio`, `about`, `location`, `email`, `github`, `linkedin`, `resume_url`, `photo_url`, `published`, `updated_at` |
+| `projects/{id}` | `title`, `category`, `status` (`ongoing` or `completed`), `description`, `url`, `sort_order`, `published`, `attachments`, `attachment_paths`, `created_at`, `updated_at` |
 | `certificates/{id}` | `title`, `description`, `kind`, `issuer`, `public_url`, `published`, `attachments`, `attachment_paths`, `created_at`, `updated_at` |
 
 Each new attachment contains `provider: 'r2'`, `path`, `name`, `size`, and `type`. A missing provider (or `firebase`) denotes a legacy Firebase object. Both providers can coexist during migration. Paths follow `portfolio/{projects|certificates}/{recordId}/{uploadId}/{filename}`; no signed URLs are persisted.
